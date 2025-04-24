@@ -183,25 +183,25 @@ MasterChef-Bench is a multi-agent benchmark system for testing LLM coherence and
 
 ## 7. Implementation Roadmap
 
-### Phase 1: Core Infrastructure (Weeks 1-3)
+### Phase 1: Core Infrastructure
 - Set up Linode server with Docker
 - Create basic API with database schema
 - Implement authentication system
 - Develop simple monitoring frontend
 
-### Phase 2: Kitchen Simulation (Weeks 3-6)
+### Phase 2: Kitchen Simulation
 - Implement kitchen state management
 - Create time simulation system
 - Develop basic agent framework
 - Build visualization components
 
-### Phase 3: Agent Development (Weeks 6-9)
+### Phase 3: Agent Development
 - Implement Cloudflare Worker agents
 - Create role-specific agent behaviors
 - Set up Ollama integration
 - Develop agent memory systems
 
-### Phase 4: Evaluation & Testing (Weeks 9-12)
+### Phase 4: Evaluation & Testing
 - Implement metrics collection
 - Create benchmark scenarios
 - Develop evaluation dashboards
