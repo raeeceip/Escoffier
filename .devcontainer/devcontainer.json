@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "build": "cd backend && go get ./... && cd ../frontend && npm install && cd ../agent && npm install"
+  }
+}
