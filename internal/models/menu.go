@@ -3,37 +3,52 @@ package models
 import (
 	"fmt"
 	"time"
-
-	"github.com/jinzhu/gorm"
 )
 
 // MenuItem represents a dish on the menu
 type MenuItem struct {
-	gorm.Model
-	Name        string
-	Description string
-	Category    string
-	Price       float64
-	PrepTime    time.Duration
-	CookTime    time.Duration
-	Ingredients []string `gorm:"type:json"`
-	Allergens   []string `gorm:"type:json"`
-	IsSpecialty bool
-	IsActive    bool
-	Calories    int
-	Servings    int
+	ID                string
+	Name              string
+	Description       string
+	Category          string
+	Price             float64
+	PrepTime          time.Duration
+	CookTime          time.Duration
+	Ingredients       []string
+	RequiredEquipment []string
+	Allergens         []string
+	Difficulty        int
+	IsSpecialty       bool
+	Notes             string
 }
 
 // MenuCategory represents the category of a menu item
 type MenuCategory string
 
 const (
+	// Menu categories
 	MenuCategoryAppetizer MenuCategory = "appetizer"
 	MenuCategoryEntree    MenuCategory = "entree"
-	MenuCategoryDessert   MenuCategory = "dessert"
 	MenuCategorySide      MenuCategory = "side"
+	MenuCategoryDessert   MenuCategory = "dessert"
 	MenuCategoryBeverage  MenuCategory = "beverage"
 	MenuCategorySpecialty MenuCategory = "specialty"
+)
+
+// Allergen represents a food allergen
+type Allergen string
+
+const (
+	// Common allergens
+	AllergenMilk      Allergen = "milk"
+	AllergenEggs      Allergen = "eggs"
+	AllergenFish      Allergen = "fish"
+	AllergenShellfish Allergen = "shellfish"
+	AllergenTreeNuts  Allergen = "tree_nuts"
+	AllergenPeanuts   Allergen = "peanuts"
+	AllergenWheat     Allergen = "wheat"
+	AllergenSoy       Allergen = "soy"
+	AllergenSesame    Allergen = "sesame"
 )
 
 // ValidateMenuItem validates a menu item

@@ -127,7 +127,7 @@ func (sc *SousChef) HandleOrder(ctx context.Context, order models.Order) error {
 	sc.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "order_handling",
-		Content:   fmt.Sprintf("Started handling order %s", order.ID),
+		Content:   fmt.Sprintf("Started handling order %d", order.ID),
 		Metadata: map[string]interface{}{
 			"order_id": order.ID,
 			"items":    len(order.Items),
@@ -154,7 +154,7 @@ func (sc *SousChef) SupervisePreparation(ctx context.Context, order models.Order
 	sc.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "preparation_supervision",
-		Content:   fmt.Sprintf("Supervised preparation of order %s", order.ID),
+		Content:   fmt.Sprintf("Supervised preparation of order %d", order.ID),
 		Metadata: map[string]interface{}{
 			"order_id": order.ID,
 			"status":   order.Status,
@@ -291,7 +291,7 @@ func (sc *SousChef) monitorOrders(ctx context.Context) error {
 
 		// Check quality
 		if err := sc.checkQuality(ctx, order); err != nil {
-			return fmt.Errorf("quality check failed for order %s: %w", order.ID, err)
+			return fmt.Errorf("quality check failed for order %d: %w", order.ID, err)
 		}
 	}
 
@@ -311,22 +311,22 @@ func (sc *SousChef) monitorOrders(ctx context.Context) error {
 func (sc *SousChef) validateOrderRequirements(ctx context.Context, order models.Order) error {
 	// Check staff availability
 	if !sc.hasAdequateStaffing(order) {
-		return fmt.Errorf("insufficient staff for order %s", order.ID)
+		return fmt.Errorf("insufficient staff for order %d", order.ID)
 	}
 
 	// Check equipment availability
 	if !sc.hasRequiredEquipment(order) {
-		return fmt.Errorf("required equipment not available for order %s", order.ID)
+		return fmt.Errorf("required equipment not available for order %d", order.ID)
 	}
 
 	// Check ingredient availability
 	if !sc.hasRequiredIngredients(order) {
-		return fmt.Errorf("required ingredients not available for order %s", order.ID)
+		return fmt.Errorf("required ingredients not available for order %d", order.ID)
 	}
 
 	// Check timing feasibility
 	if !sc.isTimingFeasible(order) {
-		return fmt.Errorf("timing not feasible for order %s", order.ID)
+		return fmt.Errorf("timing not feasible for order %d", order.ID)
 	}
 
 	return nil
@@ -350,7 +350,7 @@ func (sc *SousChef) assignOrderTasks(ctx context.Context, order models.Order) er
 		sc.AddMemory(ctx, Event{
 			Timestamp: time.Now(),
 			Type:      "task_assignment",
-			Content:   fmt.Sprintf("Assigned task %s to staff member %s", task.ID, assignee.ID),
+			Content:   fmt.Sprintf("Assigned task %s to staff member %d", task.ID, assignee.ID),
 			Metadata: map[string]interface{}{
 				"task_id":     task.ID,
 				"assignee_id": assignee.ID,
@@ -387,7 +387,7 @@ func (sc *SousChef) monitorPreparation(ctx context.Context, order models.Order) 
 		sc.AddMemory(ctx, Event{
 			Timestamp: time.Now(),
 			Type:      "preparation_monitoring",
-			Content:   fmt.Sprintf("Monitored task %s for order %s", task.ID, order.ID),
+			Content:   fmt.Sprintf("Monitored task %s for order %d", task.ID, order.ID),
 			Metadata: map[string]interface{}{
 				"task_id":  task.ID,
 				"order_id": order.ID,
@@ -518,7 +518,7 @@ func (sc *SousChef) handleOrderDelay(ctx context.Context, order models.Order, pr
 	sc.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "order_delay",
-		Content:   fmt.Sprintf("Order %s is delayed by %d minutes", order.ID, progress.DelayMinutes),
+		Content:   fmt.Sprintf("Order %d is delayed by %d minutes", order.ID, progress.DelayMinutes),
 		Metadata: map[string]interface{}{
 			"order_id":      order.ID,
 			"delay_minutes": progress.DelayMinutes,
@@ -533,7 +533,7 @@ func (sc *SousChef) handleOrderDelay(ctx context.Context, order models.Order, pr
 	// Reassign if necessary
 	if order.Priority > 8 {
 		newAssignee := sc.selectBestAssignee(Task{
-			ID:          order.ID,
+			ID:          fmt.Sprintf("%d", order.ID),
 			Type:        "order_recovery",
 			Description: "Recover delayed order",
 			Priority:    order.Priority,
@@ -542,7 +542,7 @@ func (sc *SousChef) handleOrderDelay(ctx context.Context, order models.Order, pr
 			},
 		})
 		if newAssignee != nil {
-			order.AssignedTo = newAssignee.ID
+			order.AssignedTo = fmt.Sprintf("%d", newAssignee.ID)
 		}
 	}
 
@@ -581,18 +581,24 @@ func (sc *SousChef) hasRequiredIngredients(order models.Order) bool {
 func (sc *SousChef) isTimingFeasible(order models.Order) bool {
 	// Calculate total preparation time
 	totalTime := sc.calculateTotalPrepTime(order)
-	return totalTime <= order.TimeAllowed
+	expectedTime := order.TimeReceived.Add(totalTime)
+	return time.Now().Before(expectedTime)
 }
 
 func (sc *SousChef) createOrderTasks(order models.Order) []Task {
 	var tasks []Task
 	for _, item := range order.Items {
 		// Create prep tasks
-		tasks = append(tasks, sc.createPrepTasks(item)...)
+		prepTasks := sc.createPrepTasks(item)
+		tasks = append(tasks, prepTasks...)
+
 		// Create cooking tasks
-		tasks = append(tasks, sc.createCookingTasks(item)...)
+		cookingTasks := sc.createCookingTasks(item)
+		tasks = append(tasks, cookingTasks...)
+
 		// Create plating tasks
-		tasks = append(tasks, sc.createPlatingTasks(item)...)
+		platingTasks := sc.createPlatingTasks(item)
+		tasks = append(tasks, platingTasks...)
 	}
 	return tasks
 }
@@ -674,7 +680,7 @@ func (sc *SousChef) hasRequiredSkills(staff *BaseAgent, task Task) bool {
 		return true // No specific skills required
 	}
 
-	staffSkills, ok := staff.Metadata["skills"].([]string)
+	staffSkills, ok := staff.memory.ShortTerm[0].Metadata["skills"].([]string)
 	if !ok {
 		return false
 	}
@@ -701,12 +707,6 @@ type TaskStatus struct {
 
 func (sc *SousChef) checkTaskStatus(task Task) (TaskStatus, error) {
 	var status TaskStatus
-
-	// Check completion percentage
-	completion, err := sc.getTaskCompletion(task)
-	if err != nil {
-		return status, err
-	}
 
 	// Check for delays
 	if sc.isTaskDelayed(task) {
@@ -856,10 +856,11 @@ func (sc *SousChef) handleEquipmentIssue(ctx context.Context, task Task) error {
 	})
 
 	// Request equipment maintenance
-	if equipment, ok := task.Metadata["equipment"].(string); ok {
+	if eq, ok := task.Metadata["equipment"].(string); ok {
 		task.Metadata["maintenance_requested"] = true
 		task.Metadata["equipment_status"] = "pending_maintenance"
 		task.Status = "blocked"
+		task.Metadata["equipment"] = eq
 	}
 
 	return nil
@@ -897,29 +898,31 @@ func (sc *SousChef) getCurrentLoad() int {
 	return load
 }
 
-func (sc *SousChef) createPrepTasks(item models.MenuItem) []Task {
+func (sc *SousChef) createPrepTasks(item models.OrderItem) []Task {
 	var tasks []Task
 
 	// Create prep tasks based on item requirements
-	for i, ingredient := range item.Ingredients {
-		tasks = append(tasks, Task{
-			ID:          fmt.Sprintf("prep_%s_%d", item.Name, i),
-			Type:        "ingredient_prep",
-			Description: fmt.Sprintf("Prepare %s for %s", ingredient, item.Name),
-			Priority:    1,
-			Status:      "pending",
-			StartTime:   time.Now(),
-			Metadata: map[string]interface{}{
-				"ingredient": ingredient,
-				"item":       item.Name,
-			},
-		})
+	if item.Ingredients != nil {
+		for i, ingredient := range item.Ingredients {
+			tasks = append(tasks, Task{
+				ID:          fmt.Sprintf("prep_%s_%d", item.Name, i),
+				Type:        "ingredient_prep",
+				Description: fmt.Sprintf("Prepare %s for %s", ingredient, item.Name),
+				Priority:    1,
+				Status:      "pending",
+				StartTime:   time.Now(),
+				Metadata: map[string]interface{}{
+					"ingredient": ingredient,
+					"item":       item.Name,
+				},
+			})
+		}
 	}
 
 	return tasks
 }
 
-func (sc *SousChef) createCookingTasks(item models.MenuItem) []Task {
+func (sc *SousChef) createCookingTasks(item models.OrderItem) []Task {
 	var tasks []Task
 
 	// Create cooking tasks based on item requirements
@@ -939,7 +942,7 @@ func (sc *SousChef) createCookingTasks(item models.MenuItem) []Task {
 	return tasks
 }
 
-func (sc *SousChef) createPlatingTasks(item models.MenuItem) []Task {
+func (sc *SousChef) createPlatingTasks(item models.OrderItem) []Task {
 	var tasks []Task
 
 	// Create plating tasks based on item requirements
@@ -960,9 +963,10 @@ func (sc *SousChef) createPlatingTasks(item models.MenuItem) []Task {
 
 func (sc *SousChef) getOrderTasks(order models.Order) []Task {
 	var tasks []Task
+	orderIDStr := fmt.Sprintf("%d", order.ID)
 	for _, staff := range sc.StaffMembers {
 		for _, task := range staff.memory.TaskQueue {
-			if orderID, ok := task.Metadata["order_id"].(string); ok && orderID == order.ID {
+			if orderID, ok := task.Metadata["order_id"].(string); ok && orderID == orderIDStr {
 				tasks = append(tasks, task)
 			}
 		}
@@ -992,6 +996,10 @@ func (sc *SousChef) checkPortion(order models.Order) bool {
 
 func (sc *SousChef) calculateExpectedProgress(order models.Order) float64 {
 	elapsed := time.Since(order.TimeReceived)
+	if order.EstimatedTime == 0 {
+		// If no estimated time is set, calculate based on items
+		order.EstimatedTime = sc.calculateTotalPrepTime(order)
+	}
 	expected := elapsed.Minutes() / order.EstimatedTime.Minutes()
 	if expected > 1.0 {
 		expected = 1.0
@@ -1039,5 +1047,28 @@ func (sc *SousChef) isTaskDelayed(task Task) bool {
 
 func (sc *SousChef) checkTaskQuality(task Task) []string {
 	// Implement task quality checking
+	return nil
+}
+
+func (sc *SousChef) escalateOrder(ctx context.Context, order models.Order) error {
+	// Increase priority
+	order.Priority++
+
+	// Reassign if necessary
+	if order.Priority > 8 {
+		newAssignee := sc.selectBestAssignee(Task{
+			ID:          fmt.Sprintf("%d", order.ID),
+			Type:        "order_recovery",
+			Description: "Recover delayed order",
+			Priority:    order.Priority,
+			Metadata: map[string]interface{}{
+				"order_id": order.ID,
+			},
+		})
+		if newAssignee != nil {
+			order.AssignedTo = fmt.Sprintf("%d", newAssignee.ID)
+		}
+	}
+
 	return nil
 }

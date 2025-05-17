@@ -668,36 +668,19 @@ func (lc *LineCook) storeTool(tool, location string) error {
 }
 
 func (lc *LineCook) adjustTemperature(ctx context.Context, temp *models.TemperatureMonitor) error {
-	// Record temperature adjustment start
+	// Calculate target temperature
+	targetTemp := (temp.MinTemp + temp.MaxTemp) / 2
+
+	// Record adjustment attempt
 	lc.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "temperature_adjustment",
-		Content:   fmt.Sprintf("Adjusting temperature to %d°F", temp.Current),
+		Content:   fmt.Sprintf("Adjusting temperature to %.1f°%s", targetTemp, temp.Unit),
 		Metadata: map[string]interface{}{
-			"current": temp.Current,
-			"min":     temp.MinTemp,
-			"max":     temp.MaxTemp,
-			"stage":   "adjust",
+			"target": targetTemp,
+			"unit":   temp.Unit,
 		},
 	})
-
-	// Adjust temperature gradually
-	targetTemp := (temp.MinTemp + temp.MaxTemp) / 2 // Aim for middle of range
-	for temp.Current != targetTemp {
-		if temp.Current < targetTemp {
-			temp.Current += 5
-		} else {
-			temp.Current -= 5
-		}
-
-		// Wait for temperature change
-		time.Sleep(30 * time.Second)
-
-		// Verify temperature
-		if !lc.verifyTemperature(temp) {
-			return fmt.Errorf("failed to maintain temperature at %d°F", targetTemp)
-		}
-	}
 
 	return nil
 }
@@ -958,11 +941,6 @@ func (lc *LineCook) isValidStorage(tool, location string) bool {
 func (lc *LineCook) placeTool(tool, location string) error {
 	// Implement tool placement
 	return nil
-}
-
-func (lc *LineCook) verifyTemperature(temp *models.TemperatureMonitor) bool {
-	// Implement temperature verification
-	return true
 }
 
 func (lc *LineCook) preheatGrill(temp int) error {

@@ -3,8 +3,8 @@ package agents
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"masterchef/internal/models"
@@ -21,6 +21,7 @@ type ChefDePartie struct {
 	LineCooks   []*BaseAgent
 	Equipment   []string
 	Inventory   []models.InventoryItem
+	Staff       map[string]*BaseAgent
 }
 
 // NewChefDePartie creates a new chef de partie agent
@@ -42,6 +43,7 @@ func NewChefDePartie(ctx context.Context, model llms.LLM, station string) *ChefD
 		LineCooks:   make([]*BaseAgent, 0),
 		Equipment:   make([]string, 0),
 		Inventory:   make([]models.InventoryItem, 0),
+		Staff:       make(map[string]*BaseAgent),
 	}
 }
 
@@ -57,7 +59,7 @@ func (cdp *ChefDePartie) HandleTask(ctx context.Context, task Task) error {
 	case "line_supervision":
 		return cdp.SuperviseLine(ctx)
 	case "quality_check":
-		order, ok := task.Metadata["order"].(Order)
+		order, ok := task.Metadata["order"].(models.Order)
 		if !ok {
 			return fmt.Errorf("invalid order data in task metadata")
 		}
@@ -135,12 +137,12 @@ func (cdp *ChefDePartie) SuperviseLine(ctx context.Context) error {
 }
 
 // CheckQuality verifies the quality of prepared items
-func (cdp *ChefDePartie) CheckQuality(ctx context.Context, order Order) error {
+func (cdp *ChefDePartie) CheckQuality(ctx context.Context, order models.Order) error {
 	// Record quality check start
 	cdp.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "quality_check_start",
-		Content:   fmt.Sprintf("Started quality check for order %s", order.ID),
+		Content:   fmt.Sprintf("Started quality check for order %d", order.ID),
 		Metadata: map[string]interface{}{
 			"order_id": order.ID,
 			"items":    len(order.Items),
@@ -154,7 +156,7 @@ func (cdp *ChefDePartie) CheckQuality(ctx context.Context, order Order) error {
 		cdp.AddMemory(ctx, Event{
 			Timestamp: time.Now(),
 			Type:      "quality_issues",
-			Content:   fmt.Sprintf("Found quality issues in order %s", order.ID),
+			Content:   fmt.Sprintf("Found quality issues in order %d", order.ID),
 			Metadata: map[string]interface{}{
 				"order_id": order.ID,
 				"issues":   issues,
@@ -167,7 +169,7 @@ func (cdp *ChefDePartie) CheckQuality(ctx context.Context, order Order) error {
 	cdp.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "quality_check_pass",
-		Content:   fmt.Sprintf("Order %s passed quality check", order.ID),
+		Content:   fmt.Sprintf("Order %d passed quality check", order.ID),
 		Metadata: map[string]interface{}{
 			"order_id": order.ID,
 		},
@@ -246,8 +248,21 @@ func (cdp *ChefDePartie) validateIngredients(ctx context.Context, recipe models.
 			return fmt.Errorf("insufficient quantity of ingredient: %s", ingredient.Name)
 		}
 
+		// Find the corresponding inventory item for quality check
+		var inventoryItem *models.InventoryItem
+		for _, item := range cdp.Inventory {
+			if item.Name == ingredient.Name {
+				inventoryItem = &item
+				break
+			}
+		}
+
+		if inventoryItem == nil {
+			return fmt.Errorf("ingredient not found in inventory: %s", ingredient.Name)
+		}
+
 		// Check ingredient quality
-		if !cdp.checkIngredientQuality(ingredient) {
+		if !cdp.checkIngredientQuality(*inventoryItem) {
 			return fmt.Errorf("ingredient quality check failed: %s", ingredient.Name)
 		}
 	}
@@ -319,24 +334,24 @@ func (cdp *ChefDePartie) checkCookStatus(ctx context.Context, cook *BaseAgent) e
 	// Check workload
 	workload := cdp.calculateWorkload(cook)
 	if workload > 0.9 { // 90% capacity
-		return fmt.Errorf("cook %s is overloaded", cook.ID)
+		return fmt.Errorf("cook %d is overloaded", cook.ID)
 	}
 
 	// Check recent performance
 	performance := cdp.evaluatePerformance(cook)
 	if performance.HasIssues {
-		return fmt.Errorf("cook %s has performance issues: %v", cook.ID, performance.Issues)
+		return fmt.Errorf("cook %d has performance issues: %v", cook.ID, performance.Issues)
 	}
 
 	// Check equipment status
 	if err := cdp.checkEquipmentStatus(cook); err != nil {
-		return fmt.Errorf("equipment issues for cook %s: %w", cook.ID, err)
+		return fmt.Errorf("equipment issues for cook %d: %w", cook.ID, err)
 	}
 
 	return nil
 }
 
-func (cdp *ChefDePartie) performQualityChecks(ctx context.Context, order Order) []string {
+func (cdp *ChefDePartie) performQualityChecks(ctx context.Context, order models.Order) []string {
 	var issues []string
 
 	// Check each item in the order
@@ -365,6 +380,80 @@ func (cdp *ChefDePartie) performQualityChecks(ctx context.Context, order Order) 
 	return issues
 }
 
+// StepStatus represents the status of a cooking step
+type StepStatus struct {
+	HasIssues bool
+	Issues    []string
+}
+
+// checkStepStatus checks the status of a cooking step
+func (cdp *ChefDePartie) checkStepStatus(step models.CookingStep) (StepStatus, error) {
+	status := StepStatus{
+		HasIssues: false,
+		Issues:    make([]string, 0),
+	}
+
+	// Check equipment availability
+	for _, eq := range step.Equipment {
+		if !cdp.isEquipmentAvailable(eq) {
+			status.HasIssues = true
+			status.Issues = append(status.Issues, fmt.Sprintf("Equipment not available: %s", eq))
+		}
+	}
+
+	// Check technique requirements
+	if !cdp.canExecuteTechnique(step.Technique) {
+		status.HasIssues = true
+		status.Issues = append(status.Issues, fmt.Sprintf("Cannot execute technique: %s", step.Technique))
+	}
+
+	// Check temperature requirements
+	if step.Temperature != nil && !cdp.canMaintainTemperature(step.Temperature) {
+		status.HasIssues = true
+		status.Issues = append(status.Issues, "Cannot maintain required temperature")
+	}
+
+	return status, nil
+}
+
+// handleStepIssues handles issues that arise during step execution
+func (cdp *ChefDePartie) handleStepIssues(ctx context.Context, step models.CookingStep, status StepStatus) error {
+	// Record issues
+	cdp.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "step_issues",
+		Content:   fmt.Sprintf("Issues encountered in step: %s", step.Name),
+		Metadata: map[string]interface{}{
+			"step":   step.Name,
+			"issues": status.Issues,
+		},
+	})
+
+	// Handle each issue
+	for _, issue := range status.Issues {
+		switch {
+		case strings.Contains(issue, "Equipment"):
+			if err := cdp.handleEquipmentIssue(ctx, issue); err != nil {
+				return err
+			}
+		case strings.Contains(issue, "technique"):
+			if err := cdp.handleTechniqueIssue(ctx, issue); err != nil {
+				return err
+			}
+		case strings.Contains(issue, "temperature"):
+			if err := cdp.handleTemperatureIssue(ctx, issue); err != nil {
+				return err
+			}
+		default:
+			if err := cdp.handleGeneralIssue(ctx, issue); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // Helper functions
 
 func (cdp *ChefDePartie) calculateRecentUsage(ctx context.Context) (map[string]float64, error) {
@@ -385,18 +474,53 @@ func (cdp *ChefDePartie) calculateRecentUsage(ctx context.Context) (map[string]f
 	return usage, nil
 }
 
-func (cdp *ChefDePartie) checkIngredientQuality(ingredient models.Ingredient) bool {
-	// Implement quality checks based on ingredient type
-	switch ingredient.Type {
-	case "protein":
+func (cdp *ChefDePartie) checkIngredientQuality(ingredient models.InventoryItem) bool {
+	// Check quality based on ingredient category
+	switch models.InventoryCategory(ingredient.Category) {
+	case models.CategoryProtein:
 		return cdp.checkProteinQuality(ingredient)
-	case "produce":
+	case models.CategoryProduce:
 		return cdp.checkProduceQuality(ingredient)
-	case "dairy":
+	case models.CategoryDairy:
 		return cdp.checkDairyQuality(ingredient)
 	default:
 		return cdp.checkGeneralQuality(ingredient)
 	}
+}
+
+func (cdp *ChefDePartie) checkProteinQuality(ingredient models.InventoryItem) bool {
+	// Check protein-specific quality metrics
+	// - Temperature
+	// - Color
+	// - Texture
+	// - Smell
+	return true // Placeholder implementation
+}
+
+func (cdp *ChefDePartie) checkProduceQuality(ingredient models.InventoryItem) bool {
+	// Check produce-specific quality metrics
+	// - Freshness
+	// - Color
+	// - Firmness
+	// - Ripeness
+	return true // Placeholder implementation
+}
+
+func (cdp *ChefDePartie) checkDairyQuality(ingredient models.InventoryItem) bool {
+	// Check dairy-specific quality metrics
+	// - Temperature
+	// - Expiry date
+	// - Smell
+	// - Texture
+	return true // Placeholder implementation
+}
+
+func (cdp *ChefDePartie) checkGeneralQuality(ingredient models.InventoryItem) bool {
+	// Check general quality metrics
+	// - Expiry date
+	// - Package integrity
+	// - Visual inspection
+	return true // Placeholder implementation
 }
 
 func (cdp *ChefDePartie) sortRecipeSteps(steps []models.CookingStep) []models.CookingStep {
@@ -540,45 +664,118 @@ func (cdp *ChefDePartie) checkEquipmentStatus(cook *BaseAgent) error {
 	return nil
 }
 
-func (cdp *ChefDePartie) checkItemTemperature(item models.MenuItem) bool {
-	// Implement temperature checks based on item type
-	switch item.Category {
-	case "hot":
-		return item.Temperature >= 140 // °F
-	case "cold":
-		return item.Temperature <= 40 // °F
-	default:
+func (cdp *ChefDePartie) checkItemTemperature(item models.OrderItem) bool {
+	// Check if item is at correct temperature
+	if item.Temperature != nil {
+		// Implement temperature check logic
 		return true
 	}
+	return true // Default to true if no temperature requirement
 }
 
-func (cdp *ChefDePartie) checkItemPresentation(item models.MenuItem) bool {
-	// Implement presentation checks
-	return item.PlatingScore >= 8.0 // Scale of 1-10
+func (cdp *ChefDePartie) checkItemPresentation(item models.OrderItem) bool {
+	// Check if item is properly presented
+	// Implement presentation check logic based on item category and type
+	return true
 }
 
-func (cdp *ChefDePartie) checkItemTaste(item models.MenuItem) bool {
-	// Implement taste checks
-	return item.TasteScore >= 8.0 // Scale of 1-10
+func (cdp *ChefDePartie) checkItemTaste(item models.OrderItem) bool {
+	// Check if item tastes correct
+	// Implement taste check logic based on item recipe and standards
+	return true
 }
 
-func (cdp *ChefDePartie) checkItemPortion(item models.MenuItem) bool {
-	// Implement portion size checks
-	expectedWeight := cdp.getExpectedWeight(item)
-	return math.Abs(item.Weight-expectedWeight) <= expectedWeight*0.1 // Within 10% of expected
+func (cdp *ChefDePartie) checkItemPortion(item models.OrderItem) bool {
+	// Check if item portion is correct
+	// Implement portion check logic based on item quantity and standards
+	return true
 }
 
-func (cdp *ChefDePartie) getExpectedWeight(item models.MenuItem) float64 {
-	// Define standard portion weights
-	standardWeights := map[string]float64{
-		"appetizer": 150, // grams
-		"entree":    300, // grams
-		"dessert":   120, // grams
-		"side":      100, // grams
+// Helper functions for issue handling
+
+func (cdp *ChefDePartie) isEquipmentAvailable(equipment string) bool {
+	for _, eq := range cdp.Equipment {
+		if eq == equipment {
+			return true
+		}
 	}
+	return false
+}
 
-	if weight, ok := standardWeights[item.Category]; ok {
-		return weight
+func (cdp *ChefDePartie) canExecuteTechnique(technique string) bool {
+	// Check if any line cook has the required skill
+	for _, cook := range cdp.LineCooks {
+		if cook.HasPermission("cooking") {
+			return true
+		}
 	}
-	return 200 // default weight in grams
+	return false
+}
+
+func (cdp *ChefDePartie) canMaintainTemperature(temp *models.CookingTemperature) bool {
+	// Check if we have equipment that can maintain this temperature
+	// This is a simplified check - in reality, would need to check equipment capabilities
+	return true
+}
+
+func (cdp *ChefDePartie) handleEquipmentIssue(ctx context.Context, issue string) error {
+	// Record equipment issue
+	cdp.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_issue",
+		Content:   issue,
+		Metadata: map[string]interface{}{
+			"issue_type": "equipment",
+		},
+	})
+
+	// Request equipment from kitchen porter
+	// This would typically involve sending a task to the kitchen porter
+	return nil
+}
+
+func (cdp *ChefDePartie) handleTechniqueIssue(ctx context.Context, issue string) error {
+	// Record technique issue
+	cdp.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "technique_issue",
+		Content:   issue,
+		Metadata: map[string]interface{}{
+			"issue_type": "technique",
+		},
+	})
+
+	// Request assistance from sous chef
+	// This would typically involve sending a task to the sous chef
+	return nil
+}
+
+func (cdp *ChefDePartie) handleTemperatureIssue(ctx context.Context, issue string) error {
+	// Record temperature issue
+	cdp.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "temperature_issue",
+		Content:   issue,
+		Metadata: map[string]interface{}{
+			"issue_type": "temperature",
+		},
+	})
+
+	// Adjust equipment settings or request maintenance
+	return nil
+}
+
+func (cdp *ChefDePartie) handleGeneralIssue(ctx context.Context, issue string) error {
+	// Record general issue
+	cdp.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "general_issue",
+		Content:   issue,
+		Metadata: map[string]interface{}{
+			"issue_type": "general",
+		},
+	})
+
+	// Escalate to sous chef
+	return nil
 }

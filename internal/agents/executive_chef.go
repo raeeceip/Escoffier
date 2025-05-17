@@ -48,7 +48,7 @@ type MenuItem struct {
 
 // Order represents a customer order
 type Order struct {
-	ID            string
+	ID            uint
 	Items         []MenuItem
 	Status        string
 	Priority      int
@@ -142,11 +142,12 @@ func (ec *ExecutiveChef) AssignOrder(ctx context.Context, order models.Order) er
 	// Determine best staff member for the order
 	assignee := ec.selectAssignee(ctx, order)
 	if assignee == 0 {
-		return fmt.Errorf("no suitable staff member found for order %s", order.ID)
+		return fmt.Errorf("no suitable staff member found for order %d", order.ID)
 	}
 
 	// Update order status
-	order.AssignedTo = ec.Staff[strconv.FormatUint(uint64(assignee), 10)].ID
+	assigneeID := strconv.FormatUint(uint64(assignee), 10)
+	order.AssignedTo = assigneeID
 	order.Status = string(models.OrderStatusAssigned)
 	ec.KitchenStatus.ActiveOrders = append(ec.KitchenStatus.ActiveOrders, order)
 
@@ -154,7 +155,7 @@ func (ec *ExecutiveChef) AssignOrder(ctx context.Context, order models.Order) er
 	ec.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "order_assignment",
-		Content:   fmt.Sprintf("Assigned order %s to %s", order.ID, order.AssignedTo),
+		Content:   fmt.Sprintf("Assigned order %d to %s", order.ID, order.AssignedTo),
 		Metadata: map[string]interface{}{
 			"order_id": order.ID,
 			"assignee": order.AssignedTo,
@@ -266,18 +267,18 @@ func (ec *ExecutiveChef) monitorOrders(ctx context.Context) error {
 		if ec.isOrderDelayed(order) {
 			// Escalate delayed orders
 			if err := ec.escalateOrder(ctx, order); err != nil {
-				return fmt.Errorf("failed to escalate order %s: %w", order.ID, err)
+				return fmt.Errorf("failed to escalate order %d: %w", order.ID, err)
 			}
 		}
 
 		// Check quality at each stage
 		if err := ec.checkOrderQuality(ctx, order); err != nil {
-			return fmt.Errorf("quality check failed for order %s: %w", order.ID, err)
+			return fmt.Errorf("quality check failed for order %d: %w", order.ID, err)
 		}
 
 		// Update order status
 		if err := ec.updateOrderStatus(ctx, order); err != nil {
-			return fmt.Errorf("failed to update order %s status: %w", order.ID, err)
+			return fmt.Errorf("failed to update order %d status: %w", order.ID, err)
 		}
 	}
 	return nil
@@ -504,19 +505,22 @@ func (ec *ExecutiveChef) escalateOrder(ctx context.Context, order models.Order) 
 	// Reassign if necessary
 	if order.Priority > 8 {
 		newAssignee := ec.selectAssignee(ctx, order)
-		if newAssignee != order.AssignedTo {
-			order.AssignedTo = newAssignee
-			// Record reassignment
-			ec.AddMemory(ctx, Event{
-				Timestamp: time.Now(),
-				Type:      "order_escalation",
-				Content:   fmt.Sprintf("Reassigned delayed order %s", order.ID),
-				Metadata: map[string]interface{}{
-					"order_id":     order.ID,
-					"new_assignee": newAssignee,
-					"priority":     order.Priority,
-				},
-			})
+		if newAssignee != 0 {
+			newAssigneeID := strconv.FormatUint(uint64(newAssignee), 10)
+			if newAssigneeID != order.AssignedTo {
+				order.AssignedTo = newAssigneeID
+				// Record reassignment
+				ec.AddMemory(ctx, Event{
+					Timestamp: time.Now(),
+					Type:      "order_escalation",
+					Content:   fmt.Sprintf("Reassigned delayed order %d", order.ID),
+					Metadata: map[string]interface{}{
+						"order_id":     order.ID,
+						"new_assignee": newAssigneeID,
+						"priority":     order.Priority,
+					},
+				})
+			}
 		}
 	}
 
@@ -568,7 +572,7 @@ func (ec *ExecutiveChef) updateOrderStatus(ctx context.Context, order models.Ord
 		ec.AddMemory(ctx, Event{
 			Timestamp: time.Now(),
 			Type:      "order_status_change",
-			Content:   fmt.Sprintf("Updated order %s status to %s", order.ID, newStatus),
+			Content:   fmt.Sprintf("Updated order %d status to %s", order.ID, newStatus),
 			Metadata: map[string]interface{}{
 				"order_id":     order.ID,
 				"new_status":   newStatus,

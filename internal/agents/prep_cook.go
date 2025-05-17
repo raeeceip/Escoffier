@@ -70,7 +70,7 @@ func (pc *PrepCook) PrepareIngredient(ctx context.Context, ingredient models.Ing
 	pc.AddMemory(ctx, Event{
 		Timestamp: time.Now(),
 		Type:      "ingredient_prep_start",
-		Content:   fmt.Sprintf("Started preparing %s (%s %s)", ingredient.Name, ingredient.Quantity, ingredient.Unit),
+		Content:   fmt.Sprintf("Started preparing %s (%.2f %s)", ingredient.Name, ingredient.Quantity, ingredient.Unit),
 		Metadata: map[string]interface{}{
 			"ingredient_id": ingredient.ID,
 			"quantity":      ingredient.Quantity,
@@ -83,7 +83,7 @@ func (pc *PrepCook) PrepareIngredient(ctx context.Context, ingredient models.Ing
 	pc.PrepProgress[ingredient.ID] = 0.0
 
 	// Check equipment availability
-	if err := pc.checkEquipment(ctx, []string{ingredient.Equipment}); err != nil {
+	if err := pc.checkEquipment(ctx, ingredient.Equipment); err != nil {
 		return fmt.Errorf("equipment check failed: %w", err)
 	}
 
@@ -91,7 +91,7 @@ func (pc *PrepCook) PrepareIngredient(ctx context.Context, ingredient models.Ing
 	if err := pc.executePrepTask(ctx, models.PrepTask{
 		ID:        ingredient.ID,
 		Technique: ingredient.Technique,
-		Equipment: []string{ingredient.Equipment},
+		Equipment: ingredient.Equipment,
 	}); err != nil {
 		return fmt.Errorf("preparation execution failed: %w", err)
 	}

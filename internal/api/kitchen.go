@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"masterchef/internal/agents"
+	"masterchef/internal/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -12,27 +15,27 @@ import (
 // KitchenAPI represents the main API handler for the kitchen
 type KitchenAPI struct {
 	Router        *gin.Engine
-	ExecutiveChef *ExecutiveChef
-	SousChefs     map[string]*SousChef
-	DB            *Database
+	ExecutiveChef *agents.ExecutiveChef
+	SousChefs     map[string]*agents.SousChef
+	DB            Database
 }
 
 // Database represents the kitchen's database interface
 type Database interface {
-	GetOrder(ctx context.Context, id string) (*Order, error)
-	SaveOrder(ctx context.Context, order *Order) error
+	GetOrder(ctx context.Context, id string) (*models.Order, error)
+	SaveOrder(ctx context.Context, order *models.Order) error
 	GetInventory(ctx context.Context) (map[string]float64, error)
 	UpdateInventory(ctx context.Context, updates map[string]float64) error
 }
 
 // NewKitchenAPI creates a new kitchen API instance
-func NewKitchenAPI(model llms.LLM, db *Database) *KitchenAPI {
+func NewKitchenAPI(model llms.LLM, db Database) *KitchenAPI {
 	router := gin.Default()
 
 	api := &KitchenAPI{
 		Router:        router,
-		ExecutiveChef: NewExecutiveChef(context.Background(), model),
-		SousChefs:     make(map[string]*SousChef),
+		ExecutiveChef: agents.NewExecutiveChef(context.Background(), model),
+		SousChefs:     make(map[string]*agents.SousChef),
 		DB:            db,
 	}
 
@@ -70,7 +73,7 @@ func (k *KitchenAPI) setupRoutes() {
 // Order management handlers
 
 func (k *KitchenAPI) CreateOrder(c *gin.Context) {
-	var order Order
+	var order models.Order
 	if err := c.ShouldBindJSON(&order); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -241,7 +244,7 @@ func (k *KitchenAPI) AssignStaff(c *gin.Context) {
 
 // Private helper methods
 
-func (k *KitchenAPI) selectSousChef(order *Order) *SousChef {
+func (k *KitchenAPI) selectSousChef(order *models.Order) *agents.SousChef {
 	// Implement sous chef selection logic
 	return nil
 }

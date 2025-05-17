@@ -20,7 +20,7 @@ type Metrics struct {
 	EfficiencyScore     float64
 }
 
-// MetricsCollector handles the collection and storage of metrics
+// MetricsCollector handles metrics collection and reporting
 type MetricsCollector struct {
 	registry *prometheus.Registry
 	metrics  map[string]prometheus.Collector
@@ -34,7 +34,7 @@ var (
 			Help:    "Time taken to complete orders",
 			Buckets: prometheus.LinearBuckets(0, 300, 20), // 5-minute buckets
 		},
-		[]string{"order_type", "complexity"},
+		[]string{"type", "complexity"},
 	)
 
 	orderAccuracy = prometheus.NewGaugeVec(
@@ -66,20 +66,55 @@ var (
 func NewMetricsCollector() *MetricsCollector {
 	registry := prometheus.NewRegistry()
 
+	// Initialize metrics
+	orderCompletionTime := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "order_completion_time_seconds",
+			Help: "Time taken to complete orders",
+		},
+		[]string{"type", "complexity"},
+	)
+
+	accuracyGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "task_accuracy_percent",
+			Help: "Accuracy of task completion",
+		},
+		[]string{"station", "role"},
+	)
+
+	utilizationGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "resource_utilization_percent",
+			Help: "Resource utilization percentage",
+		},
+		[]string{"role", "station"},
+	)
+
+	efficiencyGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "resource_efficiency_percent",
+			Help: "Resource efficiency percentage",
+		},
+		[]string{"resource_type"},
+	)
+
+	// Create metrics map
+	metrics := map[string]prometheus.Collector{
+		"order_completion": orderCompletionTime,
+		"accuracy":         accuracyGauge,
+		"utilization":      utilizationGauge,
+		"efficiency":       efficiencyGauge,
+	}
+
 	// Register metrics
-	registry.MustRegister(orderCompletionTime)
-	registry.MustRegister(orderAccuracy)
-	registry.MustRegister(staffUtilization)
-	registry.MustRegister(resourceEfficiency)
+	for _, metric := range metrics {
+		registry.MustRegister(metric)
+	}
 
 	return &MetricsCollector{
 		registry: registry,
-		metrics: map[string]prometheus.Collector{
-			"order_completion_time": orderCompletionTime,
-			"order_accuracy":        orderAccuracy,
-			"staff_utilization":     staffUtilization,
-			"resource_efficiency":   resourceEfficiency,
-		},
+		metrics:  metrics,
 	}
 }
 
@@ -118,28 +153,33 @@ func EvaluateAgent(ctx context.Context, agent *Agent, scenario *Scenario) (*Metr
 	return metrics, nil
 }
 
-// RecordOrderCompletion records metrics for a completed order
+// RecordOrderCompletion records metrics for completed orders
 func (mc *MetricsCollector) RecordOrderCompletion(order *Order) {
-	duration := order.TimeCompleted.Sub(order.TimeReceived).Seconds()
-	orderCompletionTime.WithLabelValues(
-		order.Type,
-		fmt.Sprintf("%d", order.Complexity),
-	).Observe(duration)
+	if histogram, ok := mc.metrics["order_completion"].(*prometheus.HistogramVec); ok {
+		duration := order.TimeCompleted.Sub(order.TimeReceived).Seconds()
+		histogram.WithLabelValues(order.Type, fmt.Sprintf("%d", order.Complexity)).Observe(duration)
+	}
 }
 
-// RecordAccuracy records accuracy metrics for a station
+// RecordAccuracy records accuracy metrics
 func (mc *MetricsCollector) RecordAccuracy(station, role string, accuracy float64) {
-	orderAccuracy.WithLabelValues(station, role).Set(accuracy)
+	if gauge, ok := mc.metrics["accuracy"].(*prometheus.GaugeVec); ok {
+		gauge.WithLabelValues(station, role).Set(accuracy)
+	}
 }
 
-// RecordUtilization records staff utilization metrics
+// RecordUtilization records utilization metrics
 func (mc *MetricsCollector) RecordUtilization(role, station string, utilization float64) {
-	staffUtilization.WithLabelValues(role, station).Set(utilization)
+	if gauge, ok := mc.metrics["utilization"].(*prometheus.GaugeVec); ok {
+		gauge.WithLabelValues(role, station).Set(utilization)
+	}
 }
 
-// RecordEfficiency records resource efficiency metrics
+// RecordEfficiency records efficiency metrics
 func (mc *MetricsCollector) RecordEfficiency(resourceType string, efficiency float64) {
-	resourceEfficiency.WithLabelValues(resourceType).Set(efficiency)
+	if gauge, ok := mc.metrics["efficiency"].(*prometheus.GaugeVec); ok {
+		gauge.WithLabelValues(resourceType).Set(efficiency)
+	}
 }
 
 // Private evaluation methods

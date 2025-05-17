@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"masterchef/backend/handlers"
 	"masterchef/internal/database"
 	"net/http"
 	"os"
@@ -13,12 +14,8 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
-	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
-
-var db *gorm.DB
-var err error
 
 func main() {
 	// Initialize database
@@ -81,8 +78,8 @@ func setupRoutes(router *gin.Engine) {
 	})
 
 	// Kitchen routes
-	router.GET("/kitchen", GetKitchenState)
-	router.POST("/kitchen", UpdateKitchenState)
+	router.GET("/kitchen", handlers.GetKitchenStateHandler)
+	router.POST("/kitchen", handlers.UpdateKitchenStateHandler)
 
 	// Agent routes
 	InitializeAgentRoutes(router)
@@ -116,22 +113,4 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
-}
-
-// GetKitchenStateHandler handles GET requests for kitchen state
-func GetKitchenStateHandler(c *gin.Context) {
-	kitchen := GetKitchenState()
-	c.JSON(http.StatusOK, kitchen)
-}
-
-// UpdateKitchenStateHandler handles POST requests to update kitchen state
-func UpdateKitchenStateHandler(c *gin.Context) {
-	var kitchen Kitchen
-	if err := c.ShouldBindJSON(&kitchen); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	UpdateKitchenState(kitchen)
-	c.JSON(http.StatusOK, gin.H{"message": "Kitchen state updated"})
 }

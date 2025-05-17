@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"masterchef/internal/agents"
+	"masterchef/internal/api"
+	"masterchef/internal/models"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +15,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
@@ -23,6 +27,61 @@ var (
 	metricsPort = flag.Int("metrics-port", 9090, "Metrics server port")
 	configFile  = flag.String("config", "configs/config.yaml", "Path to configuration file")
 )
+
+// Database represents the application's database connection
+type Database struct {
+	*gorm.DB
+}
+
+// GetInventory returns the current inventory state
+func (db *Database) GetInventory(ctx context.Context) (map[string]float64, error) {
+	var items []struct {
+		Name     string
+		Quantity float64
+	}
+	if err := db.Table("inventory_items").Select("name, quantity").Scan(&items).Error; err != nil {
+		return nil, err
+	}
+
+	inventory := make(map[string]float64)
+	for _, item := range items {
+		inventory[item.Name] = item.Quantity
+	}
+	return inventory, nil
+}
+
+// GetOrder retrieves an order by ID
+func (db *Database) GetOrder(ctx context.Context, id string) (*models.Order, error) {
+	var order models.Order
+	if err := db.Where("id = ?", id).First(&order).Error; err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+// SaveOrder saves an order to the database
+func (db *Database) SaveOrder(ctx context.Context, order *models.Order) error {
+	return db.Save(order).Error
+}
+
+// UpdateInventory updates the inventory levels
+func (db *Database) UpdateInventory(ctx context.Context, inventory map[string]float64) error {
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	for item, quantity := range inventory {
+		if err := tx.Table("inventory_items").Where("name = ?", item).Update("quantity", quantity).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit().Error
+}
 
 func main() {
 	flag.Parse()
@@ -49,9 +108,6 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	// Initialize metrics collector
-	metricsCollector := evaluation.NewMetricsCollector()
-
 	// Initialize API server
 	api := api.NewKitchenAPI(model, db)
 
@@ -60,8 +116,10 @@ func main() {
 		log.Fatalf("Failed to initialize agents: %v", err)
 	}
 
-	// Start metrics server
-	go startMetricsServer(*metricsPort)
+	// Start metrics server if enabled
+	if config.MetricsConfig.Enabled {
+		go startMetricsServer(*metricsPort)
+	}
 
 	// Start API server
 	server := &http.Server{
@@ -104,7 +162,7 @@ func initializeLLM(config *Config) (llms.LLM, error) {
 	// Initialize OpenAI client
 	llm, err := openai.New(
 		openai.WithModel("gpt-4-turbo-preview"),
-		openai.WithAPIKey(config.OpenAIKey),
+		openai.WithToken(os.Getenv("OPENAI_API_KEY")),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OpenAI client: %w", err)
@@ -114,8 +172,20 @@ func initializeLLM(config *Config) (llms.LLM, error) {
 }
 
 func initializeDB(config *Config) (*Database, error) {
-	// Implement database initialization
-	return &Database{}, nil
+	db, err := gorm.Open("sqlite3", config.DatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Enable GORM logging in development
+	db.LogMode(true)
+
+	// Configure connection pool
+	db.DB().SetMaxIdleConns(10)
+	db.DB().SetMaxOpenConns(100)
+	db.DB().SetConnMaxLifetime(time.Hour)
+
+	return &Database{DB: db}, nil
 }
 
 func initializeAgents(ctx context.Context, api *api.KitchenAPI, model llms.LLM) error {
