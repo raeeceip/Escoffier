@@ -36,6 +36,10 @@ type OrderItem struct {
 	Category          string
 	Price             float64
 	IsSpecialty       bool
+	RequiresGrilling  bool
+	RequiresSauteing  bool
+	RequiresBaking    bool
+	Complexity        int
 }
 
 // OrderStatus represents the status of an order

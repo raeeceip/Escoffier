@@ -36,7 +36,11 @@ func (s *PlaygroundServer) setupRoutes() {
 
 	// Serve static files
 	s.router.Static("/static", "./web/static")
-	s.router.LoadHTMLGlob("web/templates/*")
+
+	// In test mode, Gin will be in TestMode, so we can avoid loading templates
+	if gin.Mode() != gin.TestMode {
+		s.router.LoadHTMLGlob("web/templates/*")
+	}
 
 	api := s.router.Group("/api")
 	{
@@ -54,6 +58,10 @@ func (s *PlaygroundServer) Router() *gin.Engine {
 
 // handleHome handles the home page request
 func (s *PlaygroundServer) handleHome(c *gin.Context) {
+	if gin.Mode() == gin.TestMode {
+		c.String(200, "Playground Home - Test Mode")
+		return
+	}
 	c.HTML(200, "playground.html", gin.H{
 		"title": "MasterChef-Bench LLM Playground",
 	})

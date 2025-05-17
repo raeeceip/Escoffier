@@ -148,3 +148,58 @@ For questions and support, please open an issue or contact the maintainers:
 
 - GitHub Issues: [Project Issues](https://github.com/yourusername/masterchef-bench/issues)
 - Email: your.email@example.com
+
+## Testing
+
+### Go Tests
+
+Run tests for specific packages:
+
+```bash
+# Run all tests
+go test ./...
+
+# Run specific package tests
+go test ./internal/monitoring
+go test ./internal/evaluation
+go test ./internal/playground
+
+# Run tests with coverage
+go test ./internal/monitoring ./internal/evaluation ./internal/playground -cover
+```
+
+### Frontend Tests
+
+The frontend is built with React and can be tested using Jest:
+
+```bash
+cd frontend
+npm test
+```
+
+### Test Structure
+
+- **Go Tests**: Located in the `internal/<package>/tests` directories
+- **React Tests**: Located alongside the components they test with a `.test.tsx` extension
+
+### Debugging Tests
+
+If you encounter issues with tests:
+
+1. Check that all dependencies are installed:
+
+   ```bash
+   go mod tidy
+   cd frontend && npm install
+   ```
+
+2. Run tests with verbose output:
+
+   ```bash
+   go test -v ./...
+   ```
+
+3. Run specific failing tests:
+   ```bash
+   go test -v ./path/to/package -run TestName
+   ```

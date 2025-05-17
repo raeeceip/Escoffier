@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -191,14 +192,73 @@ func (sc *SousChef) checkStationStatus(ctx context.Context) (*StationStatus, err
 
 	// Perform new status check if needed
 	if len(recentChecks) == 0 || time.Since(recentChecks[0].Timestamp) > 15*time.Minute {
-		// TODO: Implement actual station status checking logic
+		// Gather station information from various sources
+		// 1. Check equipment status
+		equipmentStatus := make(map[string]string)
+		equipmentList := []string{"stove", "oven", "grill", "fryer", "mixer"}
+
+		for _, eq := range equipmentList {
+			// In a real system, this would query equipment sensors or status API
+			status := "operational"
+			if rand.Float64() < 0.05 { // 5% chance of maintenance needed
+				status = "needs_maintenance"
+			} else if rand.Float64() < 0.02 { // 2% chance of being out of service
+				status = "out_of_service"
+			}
+			equipmentStatus[eq] = status
+		}
+
+		// 2. Analyze current workload
+		currentLoad := len(sc.ActiveOrders)
+
+		// 3. Check staff availability and skills
+		availableStaff := 0
+		for _, staff := range sc.StaffMembers {
+			if sc.calculateWorkload(staff) < 0.8 { // Staff member has capacity
+				availableStaff++
+			}
+		}
+
+		// 4. Determine overall station status
+		stationStatus := "operational"
+		if currentLoad > 15 {
+			stationStatus = "high_capacity"
+		} else if currentLoad < 3 {
+			stationStatus = "low_capacity"
+		}
+
+		// Check for critical equipment issues
+		criticalEquipment := 0
+		for _, status := range equipmentStatus {
+			if status == "out_of_service" {
+				criticalEquipment++
+			}
+		}
+
+		if criticalEquipment > 1 {
+			stationStatus = "limited_capacity"
+		}
+
+		if availableStaff < 2 {
+			stationStatus = "understaffed"
+		}
+
+		// 5. Create equipment list that is operational
+		operationalEquipment := []string{}
+		for eq, status := range equipmentStatus {
+			if status == "operational" {
+				operationalEquipment = append(operationalEquipment, eq)
+			}
+		}
+
+		// Create and return the status
 		status := &StationStatus{
 			Name:           sc.Station,
 			Capacity:       10,
-			CurrentLoad:    len(sc.ActiveOrders),
-			AvailableStaff: len(sc.StaffMembers),
-			Equipment:      []string{"stove", "oven", "grill"},
-			Status:         "operational",
+			CurrentLoad:    currentLoad,
+			AvailableStaff: availableStaff,
+			Equipment:      operationalEquipment,
+			Status:         stationStatus,
 		}
 
 		sc.AddMemory(ctx, Event{
@@ -466,7 +526,45 @@ func (sc *SousChef) requestAdditionalStaff(ctx context.Context, count int) error
 		},
 	})
 
-	// TODO: Implement actual staff request logic through HR system
+	// Implement actual staff request logic through HR system
+	hr := &HRSystem{
+		RequestID:   fmt.Sprintf("staff_req_%d", time.Now().Unix()),
+		RequestType: "additional_staff",
+		Station:     sc.Station,
+		Quantity:    count,
+		Urgency:     sc.calculateStaffingUrgency(),
+		Skills:      sc.getRequiredSkills(),
+	}
+
+	// Send the request to HR system
+	if err := hr.SubmitStaffRequest(ctx); err != nil {
+		return fmt.Errorf("failed to submit staff request: %w", err)
+	}
+
+	// Set a timer to follow up if no response
+	go func() {
+		timer := time.NewTimer(30 * time.Minute)
+		<-timer.C
+
+		// Check if request is still pending
+		status, err := hr.CheckRequestStatus(ctx)
+		if err != nil || status == "pending" {
+			// Follow up on request
+			hr.EscalateRequest(ctx)
+
+			// Record follow-up
+			sc.AddMemory(ctx, Event{
+				Timestamp: time.Now(),
+				Type:      "staff_request_followup",
+				Content:   fmt.Sprintf("Followed up on staff request for %d members", count),
+				Metadata: map[string]interface{}{
+					"request_id": hr.RequestID,
+					"station":    sc.Station,
+				},
+			})
+		}
+	}()
+
 	return nil
 }
 
@@ -482,7 +580,39 @@ func (sc *SousChef) releaseExcessStaff(ctx context.Context, count int) error {
 		},
 	})
 
-	// TODO: Implement actual staff release logic through HR system
+	// Implement actual staff release logic through HR system
+	if count <= 0 {
+		return nil // No staff to release
+	}
+
+	// Identify staff members that can be released based on workload and priority
+	staffToRelease := sc.identifyStaffForRelease(count)
+	if len(staffToRelease) == 0 {
+		return fmt.Errorf("unable to identify staff members for release")
+	}
+
+	// Create HR system release request
+	hr := &HRSystem{
+		RequestID:   fmt.Sprintf("staff_rel_%d", time.Now().Unix()),
+		RequestType: "release_staff",
+		Station:     sc.Station,
+		Quantity:    len(staffToRelease),
+		StaffIDs:    staffToRelease,
+	}
+
+	// Ensure tasks are reassigned before releasing staff
+	if err := sc.reassignTasksFromReleasedStaff(ctx, staffToRelease); err != nil {
+		return fmt.Errorf("failed to reassign tasks: %w", err)
+	}
+
+	// Send the release request to HR system
+	if err := hr.SubmitStaffRelease(ctx); err != nil {
+		return fmt.Errorf("failed to submit staff release request: %w", err)
+	}
+
+	// Remove released staff from local roster
+	sc.removeReleasedStaffFromRoster(staffToRelease)
+
 	return nil
 }
 
@@ -1071,4 +1201,228 @@ func (sc *SousChef) escalateOrder(ctx context.Context, order models.Order) error
 	}
 
 	return nil
+}
+
+// calculateStaffingUrgency determines how urgent the need for additional staff is
+func (sc *SousChef) calculateStaffingUrgency() string {
+	// Check current workload
+	currentLoad := len(sc.ActiveOrders)
+	availableStaff := len(sc.StaffMembers)
+
+	// Calculate ideal staff-to-order ratio
+	idealStaff := currentLoad / 2 // Assume 1 staff member can handle 2 orders optimally
+
+	if availableStaff == 0 && currentLoad > 0 {
+		return "critical" // No staff but we have orders
+	} else if float64(availableStaff) < float64(idealStaff)*0.5 {
+		return "high" // Less than 50% of ideal staffing
+	} else if float64(availableStaff) < float64(idealStaff)*0.8 {
+		return "medium" // Less than 80% of ideal staffing
+	}
+
+	// Check if during peak hours
+	if sc.isPeakHour() {
+		// Increase urgency during peak hours
+		if currentLoad > availableStaff*3 {
+			return "high"
+		}
+		return "medium"
+	}
+
+	return "low"
+}
+
+// getRequiredSkills determines what skills are needed for additional staff
+func (sc *SousChef) getRequiredSkills() []string {
+	requiredSkills := make([]string, 0)
+
+	// Analyze active orders to determine required skills
+	skillsMap := make(map[string]bool)
+
+	for _, order := range sc.ActiveOrders {
+		for _, item := range order.Items {
+			// Add skills based on item preparation requirements
+			if item.RequiresGrilling {
+				skillsMap["grilling"] = true
+			}
+			if item.RequiresSauteing {
+				skillsMap["sauteing"] = true
+			}
+			if item.RequiresBaking {
+				skillsMap["baking"] = true
+			}
+			// Add more specialized skills based on recipe complexity
+			if item.Complexity > 7 {
+				skillsMap["advanced_cooking"] = true
+			}
+		}
+	}
+
+	// Convert map to slice
+	for skill := range skillsMap {
+		requiredSkills = append(requiredSkills, skill)
+	}
+
+	// Always need basic skills
+	if len(requiredSkills) == 0 {
+		requiredSkills = append(requiredSkills, "cooking_basics")
+	}
+
+	return requiredSkills
+}
+
+// identifyStaffForRelease selects staff members that can be released
+func (sc *SousChef) identifyStaffForRelease(count int) []string {
+	staffIDs := make([]string, 0)
+
+	// Create a list of staff with workload assessment
+	type staffWorkload struct {
+		ID       string
+		Workload float64
+		Critical bool // Whether the staff has critical skills
+	}
+
+	var staffList []staffWorkload
+
+	// Calculate workload for each staff member
+	for _, staff := range sc.StaffMembers {
+		workload := sc.calculateWorkload(staff)
+		critical := sc.hasUniqueSkills(staff)
+
+		staffList = append(staffList, staffWorkload{
+			ID:       fmt.Sprintf("%d", staff.ID),
+			Workload: workload,
+			Critical: critical,
+		})
+	}
+
+	// Sort by workload (lowest first) and non-critical first
+	sort.Slice(staffList, func(i, j int) bool {
+		if staffList[i].Critical != staffList[j].Critical {
+			return !staffList[i].Critical // Non-critical first
+		}
+		return staffList[i].Workload < staffList[j].Workload // Then by lowest workload
+	})
+
+	// Select staff to release, limited by count
+	for i := 0; i < len(staffList) && len(staffIDs) < count; i++ {
+		if staffList[i].Workload < 0.3 && !staffList[i].Critical { // Only release if workload is low
+			staffIDs = append(staffIDs, staffList[i].ID)
+		}
+	}
+
+	return staffIDs
+}
+
+// hasUniqueSkills determines if a staff member has unique skills that others don't
+func (sc *SousChef) hasUniqueSkills(staff *BaseAgent) bool {
+	// Get this staff member's skills
+	staffSkills, ok := staff.memory.ShortTerm[0].Metadata["skills"].([]string)
+	if !ok {
+		return false
+	}
+
+	// Check if any skill is unique to this staff member
+	for _, skill := range staffSkills {
+		unique := true
+		for _, other := range sc.StaffMembers {
+			if other.ID == staff.ID {
+				continue // Skip self
+			}
+
+			otherSkills, ok := other.memory.ShortTerm[0].Metadata["skills"].([]string)
+			if !ok {
+				continue
+			}
+
+			for _, otherSkill := range otherSkills {
+				if otherSkill == skill {
+					unique = false
+					break
+				}
+			}
+
+			if !unique {
+				break
+			}
+		}
+
+		if unique {
+			return true
+		}
+	}
+
+	return false
+}
+
+// reassignTasksFromReleasedStaff redistributes tasks from staff being released
+func (sc *SousChef) reassignTasksFromReleasedStaff(ctx context.Context, staffIDs []string) error {
+	// Convert string IDs to a map for quick lookup
+	idMap := make(map[string]bool)
+	for _, id := range staffIDs {
+		idMap[id] = true
+	}
+
+	// Collect all tasks from staff being released
+	var tasksToReassign []Task
+
+	for _, staff := range sc.StaffMembers {
+		staffID := fmt.Sprintf("%d", staff.ID)
+		if _, releasing := idMap[staffID]; releasing {
+			// Add tasks to reassignment list
+			for _, task := range staff.memory.TaskQueue {
+				if task.Status == "pending" || task.Status == "in_progress" {
+					tasksToReassign = append(tasksToReassign, task)
+				}
+			}
+
+			// Clear staff task queue
+			staff.memory.TaskQueue = []Task{}
+		}
+	}
+
+	// Reassign each collected task
+	for _, task := range tasksToReassign {
+		assignee := sc.selectBestAssignee(task)
+		if assignee == nil {
+			return fmt.Errorf("no suitable assignee for task %s", task.ID)
+		}
+
+		// Record reassignment
+		sc.AddMemory(ctx, Event{
+			Timestamp: time.Now(),
+			Type:      "task_reassignment",
+			Content:   fmt.Sprintf("Reassigned task %s to staff member %d", task.ID, assignee.ID),
+			Metadata: map[string]interface{}{
+				"task_id":     task.ID,
+				"assignee_id": assignee.ID,
+			},
+		})
+
+		assignee.AddTask(task)
+	}
+
+	return nil
+}
+
+// removeReleasedStaffFromRoster removes released staff from the SousChef's roster
+func (sc *SousChef) removeReleasedStaffFromRoster(staffIDs []string) {
+	// Convert string IDs to a map for quick lookup
+	idMap := make(map[string]bool)
+	for _, id := range staffIDs {
+		idMap[id] = true
+	}
+
+	// Create a new staff list without the released staff
+	newStaffList := make([]*BaseAgent, 0)
+
+	for _, staff := range sc.StaffMembers {
+		staffID := fmt.Sprintf("%d", staff.ID)
+		if _, releasing := idMap[staffID]; !releasing {
+			newStaffList = append(newStaffList, staff)
+		}
+	}
+
+	// Update the SousChef's staff list
+	sc.StaffMembers = newStaffList
 }

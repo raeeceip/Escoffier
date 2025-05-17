@@ -18,6 +18,7 @@ type MenuItem struct {
 	RequiredEquipment []string
 	Allergens         []string
 	Difficulty        int
+	Complexity        int // Rating from 1-10 indicating dish complexity
 	IsSpecialty       bool
 	Notes             string
 }

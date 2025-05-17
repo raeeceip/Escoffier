@@ -4,19 +4,20 @@ import "time"
 
 // Recipe represents a cooking recipe in the kitchen
 type Recipe struct {
-	ID          string
-	Name        string
-	Description string
-	Category    string
-	Complexity  int
-	PrepTime    time.Duration
-	CookTime    time.Duration
-	Servings    int
-	Ingredients []IngredientRequirement
-	Steps       []CookingStep
-	Equipment   []string
-	Notes       string
-	Tags        []string
+	ID            string
+	Name          string
+	Description   string
+	Category      string
+	Complexity    int
+	PrepTime      time.Duration
+	CookTime      time.Duration
+	EstimatedTime time.Duration
+	Servings      int
+	Ingredients   []IngredientRequirement
+	Steps         []CookingStep
+	Equipment     []string
+	Notes         string
+	Tags          []string
 }
 
 // IngredientRequirement represents a required ingredient for a recipe
@@ -37,6 +38,7 @@ type CookingStep struct {
 	Name              string
 	Description       string
 	Duration          time.Duration
+	Sequence          int // Order in the recipe sequence
 	Equipment         []string
 	RequiredEquipment []string
 	Technique         string

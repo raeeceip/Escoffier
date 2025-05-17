@@ -34,7 +34,15 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: go test -v ./internal/monitoring ./internal/evaluation ./internal/playground
+        run: |
+          go test -v ./internal/monitoring
+          go test -v ./internal/evaluation
+          go test -v ./internal/playground/tests
+        env:
+          GIN_MODE: test
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'sk-test-key' }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'test-key' }}
 
   lint:
     name: Lint

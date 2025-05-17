@@ -494,7 +494,56 @@ func (cdp *ChefDePartie) checkProteinQuality(ingredient models.InventoryItem) bo
 	// - Color
 	// - Texture
 	// - Smell
-	return true // Placeholder implementation
+
+	// Check temperature for proteins
+	if ingredient.Temperature < 0 || ingredient.Temperature > 4 {
+		// Proteins should be stored between 0-4°C for food safety
+		return false
+	}
+
+	// Check expiration date
+	if ingredient.ExpiryDate != nil && time.Now().After(*ingredient.ExpiryDate) {
+		return false
+	}
+
+	// Check quality based on protein type
+	switch ingredient.Name {
+	case "beef", "lamb", "pork":
+		// Red meats
+		if ingredient.Color != "red" && ingredient.Color != "pink" {
+			return false // Wrong color indicates spoilage
+		}
+		if ingredient.Texture == "slimy" || ingredient.Texture == "sticky" {
+			return false // Indicates spoilage
+		}
+		if ingredient.Smell == "sour" || ingredient.Smell == "ammonia" {
+			return false // Bad smell indicates spoilage
+		}
+	case "chicken", "turkey", "duck":
+		// Poultry
+		if ingredient.Color == "greenish" || ingredient.Color == "grayish" {
+			return false // Wrong color indicates spoilage
+		}
+		if ingredient.Texture == "slimy" {
+			return false // Indicates spoilage
+		}
+		if ingredient.Smell == "strong" || ingredient.Smell == "sour" {
+			return false // Bad smell indicates spoilage
+		}
+	case "salmon", "tuna", "seabass", "cod":
+		// Fish
+		if ingredient.Smell == "strong" || ingredient.Smell == "ammonia" {
+			return false // Fresh fish shouldn't smell overly fishy
+		}
+		if ingredient.Eyes != "clear" { // For whole fish
+			return false // Cloudy eyes indicate older fish
+		}
+		if ingredient.Texture == "mushy" {
+			return false // Should be firm to touch
+		}
+	}
+
+	return true
 }
 
 func (cdp *ChefDePartie) checkProduceQuality(ingredient models.InventoryItem) bool {
@@ -503,7 +552,66 @@ func (cdp *ChefDePartie) checkProduceQuality(ingredient models.InventoryItem) bo
 	// - Color
 	// - Firmness
 	// - Ripeness
-	return true // Placeholder implementation
+
+	// Check temperature for produce
+	if ingredient.Category == string(models.CategoryProduce) {
+		if ingredient.Temperature < 2 || ingredient.Temperature > 10 {
+			// Most produce should be stored between 2-10°C
+			return false
+		}
+	}
+
+	// Check quality based on produce type
+	switch {
+	case strings.Contains(ingredient.Name, "lettuce"),
+		strings.Contains(ingredient.Name, "spinach"),
+		strings.Contains(ingredient.Name, "kale"):
+		// Leafy greens
+		if ingredient.Color != "green" || strings.Contains(ingredient.Color, "yellow") {
+			return false // Yellowing indicates age
+		}
+		if ingredient.Texture == "slimy" || ingredient.Texture == "wilted" {
+			return false // Should be crisp
+		}
+		if ingredient.Smell == "sour" {
+			return false // Should have little smell
+		}
+	case strings.Contains(ingredient.Name, "tomato"),
+		strings.Contains(ingredient.Name, "pepper"),
+		strings.Contains(ingredient.Name, "cucumber"):
+		// Vine vegetables
+		if ingredient.Firmness == "soft" && !strings.Contains(ingredient.Name, "tomato") {
+			return false // Most should be firm except ripe tomatoes
+		}
+		if ingredient.Texture == "wrinkled" || ingredient.Texture == "mushy" {
+			return false // Indicates age
+		}
+	case strings.Contains(ingredient.Name, "apple"),
+		strings.Contains(ingredient.Name, "pear"),
+		strings.Contains(ingredient.Name, "peach"):
+		// Tree fruits
+		if ingredient.Texture == "mushy" && ingredient.Name != "peach" {
+			return false // Too soft indicates overripe
+		}
+		if ingredient.Bruises > 2 {
+			return false // Too many bruises
+		}
+	case strings.Contains(ingredient.Name, "berry"):
+		// Berries
+		if ingredient.Mold {
+			return false // Any mold is unacceptable
+		}
+		if ingredient.Texture == "mushy" {
+			return false // Should be firm but not hard
+		}
+	}
+
+	// Check common metrics
+	if ingredient.Bruises > 3 || ingredient.Mold || ingredient.Pests {
+		return false
+	}
+
+	return true
 }
 
 func (cdp *ChefDePartie) checkDairyQuality(ingredient models.InventoryItem) bool {
@@ -512,7 +620,56 @@ func (cdp *ChefDePartie) checkDairyQuality(ingredient models.InventoryItem) bool
 	// - Expiry date
 	// - Smell
 	// - Texture
-	return true // Placeholder implementation
+
+	// Check temperature for dairy
+	if ingredient.Temperature < 0 || ingredient.Temperature > 4 {
+		// Dairy should be stored between 0-4°C
+		return false
+	}
+
+	// Check expiration date
+	if ingredient.ExpiryDate != nil && time.Now().After(*ingredient.ExpiryDate) {
+		return false
+	}
+
+	// Check quality based on dairy type
+	switch {
+	case strings.Contains(ingredient.Name, "milk"):
+		// Milk
+		if ingredient.Smell == "sour" {
+			return false // Sour smell indicates spoilage
+		}
+		if ingredient.Texture == "chunky" {
+			return false // Should be liquid
+		}
+	case strings.Contains(ingredient.Name, "cheese"):
+		// Cheese (unaged)
+		if !strings.Contains(ingredient.Name, "blue") && ingredient.Mold {
+			return false // Mold is bad unless it's blue cheese
+		}
+		if ingredient.Smell == "ammonia" {
+			return false // Strong ammonia smell is bad
+		}
+	case strings.Contains(ingredient.Name, "yogurt"),
+		strings.Contains(ingredient.Name, "cream"):
+		// Yogurt and cream
+		if ingredient.Texture == "watery" {
+			return false // Indicates separation
+		}
+		if ingredient.Smell == "strong" || ingredient.Smell == "yeasty" {
+			return false // Bad smell indicates spoilage
+		}
+	case strings.Contains(ingredient.Name, "butter"):
+		// Butter
+		if ingredient.Smell == "sour" || ingredient.Smell == "rancid" {
+			return false // Bad smell indicates spoilage
+		}
+		if ingredient.Color != "yellow" && ingredient.Color != "pale yellow" {
+			return false // Should be yellow
+		}
+	}
+
+	return true
 }
 
 func (cdp *ChefDePartie) checkGeneralQuality(ingredient models.InventoryItem) bool {
@@ -520,7 +677,49 @@ func (cdp *ChefDePartie) checkGeneralQuality(ingredient models.InventoryItem) bo
 	// - Expiry date
 	// - Package integrity
 	// - Visual inspection
-	return true // Placeholder implementation
+
+	// Check expiration date for packaged items
+	if ingredient.ExpiryDate != nil && time.Now().After(*ingredient.ExpiryDate) {
+		return false
+	}
+
+	// Check package integrity
+	if ingredient.PackageType != "" {
+		if !ingredient.PackageIntact {
+			return false // Damaged packaging is a risk
+		}
+
+		// Check for bulging cans (indicates spoilage)
+		if ingredient.PackageType == "can" && ingredient.PackageBulging {
+			return false
+		}
+
+		// Check vacuum seals
+		if ingredient.PackageType == "vacuum" && !ingredient.VacuumIntact {
+			return false
+		}
+	}
+
+	// Check storage conditions
+	if ingredient.StorageType == "dry" && ingredient.Humidity > 60 {
+		return false // Dry goods should be in low humidity
+	}
+
+	if ingredient.StorageType == "frozen" && ingredient.Temperature > -15 {
+		return false // Frozen items should be below -15°C
+	}
+
+	// Check for contaminants
+	if ingredient.Contaminants {
+		return false
+	}
+
+	// Check for pests
+	if ingredient.Pests {
+		return false
+	}
+
+	return true
 }
 
 func (cdp *ChefDePartie) sortRecipeSteps(steps []models.CookingStep) []models.CookingStep {

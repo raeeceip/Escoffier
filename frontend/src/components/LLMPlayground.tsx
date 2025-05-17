@@ -33,6 +33,8 @@ const LLMPlayground: React.FC = () => {
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricData | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -60,52 +62,81 @@ const LLMPlayground: React.FC = () => {
   }, [logs]);
 
   const setupWebSocket = () => {
-    const ws = new WebSocket(`ws://${window.location.host}/ws`);
-    
-    ws.onopen = () => {
-      appendLog('Connected to server');
-    };
+    try {
+      const ws = new WebSocket(`ws://${window.location.host}/ws`);
+      
+      ws.onopen = () => {
+        appendLog('Connected to server');
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as EvaluationResult;
-        if (data.metrics) {
-          setMetrics(data.metrics);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as EvaluationResult;
+          if (data.metrics) {
+            setMetrics(data.metrics);
+          }
+          if (data.events) {
+            appendLog("Received events:");
+            data.events.forEach(event => {
+              appendLog(JSON.stringify(event, null, 2));
+            });
+          } else {
+            appendLog(JSON.stringify(data, null, 2));
+          }
+        } catch (error) {
+          appendLog(`Error parsing message: ${error}`);
         }
-        appendLog(JSON.stringify(data, null, 2));
-      } catch (error) {
-        appendLog(`Error parsing message: ${error}`);
-      }
-    };
+      };
 
-    ws.onclose = () => {
-      appendLog('Disconnected from server');
-    };
+      ws.onclose = () => {
+        appendLog('Disconnected from server');
+      };
 
-    ws.onerror = (error) => {
-      appendLog(`WebSocket error: ${error.type}`);
-    };
+      ws.onerror = (error) => {
+        appendLog(`WebSocket error: ${error.type}`);
+        setError('Failed to connect to WebSocket server. Please check if the server is running.');
+      };
 
-    wsRef.current = ws;
+      wsRef.current = ws;
+    } catch (error) {
+      setError(`Failed to establish WebSocket connection: ${error}`);
+      appendLog(`WebSocket setup error: ${error}`);
+    }
   };
 
   const fetchModels = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch('/api/models');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data = await response.json();
       setModels(data);
+      appendLog(`Loaded ${data.length} models`);
     } catch (error) {
+      setError(`Failed to load models: ${error}`);
       appendLog(`Failed to load models: ${error}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const fetchScenarios = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch('/api/scenarios');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data = await response.json();
       setScenarios(data);
+      appendLog(`Loaded ${data.length} scenarios`);
     } catch (error) {
+      setError(`Failed to load scenarios: ${error}`);
       appendLog(`Failed to load scenarios: ${error}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -128,6 +159,13 @@ const LLMPlayground: React.FC = () => {
       return;
     }
 
+    if (wsRef.current.readyState !== WebSocket.OPEN) {
+      appendLog('WebSocket connection is not open. Reconnecting...');
+      setupWebSocket();
+      setTimeout(() => startEvaluation(), 1000);
+      return;
+    }
+
     const request = {
       model: selectedModel,
       scenario: selectedScenario,
@@ -138,20 +176,46 @@ const LLMPlayground: React.FC = () => {
     setMetrics(null);
   };
 
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="playground-container loading">
+        <div className="loading-message">Loading models and scenarios...</div>
+      </div>
+    );
+  }
+
+  // Render error state
+  if (error) {
+    return (
+      <div className="playground-container error">
+        <div className="error-message">
+          <h2>Error</h2>
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="playground-container">
       <div className="models-panel">
         <h2>Available Models</h2>
         <div className="model-list">
-          {models.map(model => (
-            <div 
-              key={model.id}
-              className={`model-item ${selectedModel === model.id ? 'selected' : ''}`}
-              onClick={() => setSelectedModel(model.id)}
-            >
-              {model.name} ({model.type})
-            </div>
-          ))}
+          {models.length > 0 ? (
+            models.map(model => (
+              <div 
+                key={model.id}
+                className={`model-item ${selectedModel === model.id ? 'selected' : ''}`}
+                onClick={() => setSelectedModel(model.id)}
+              >
+                {model.name} ({model.type})
+              </div>
+            ))
+          ) : (
+            <div className="no-data">No models available</div>
+          )}
         </div>
         <div className="button-container">
           <button 
@@ -167,16 +231,20 @@ const LLMPlayground: React.FC = () => {
       <div className="scenario-panel">
         <h2>Test Scenarios</h2>
         <div className="scenario-list">
-          {scenarios.map(scenario => (
-            <div 
-              key={scenario.id}
-              className={`scenario-item ${selectedScenario === scenario.id ? 'selected' : ''}`}
-              onClick={() => setSelectedScenario(scenario.id)}
-            >
-              {scenario.name} ({scenario.type})
-              <div className="scenario-description">{scenario.description}</div>
-            </div>
-          ))}
+          {scenarios.length > 0 ? (
+            scenarios.map(scenario => (
+              <div 
+                key={scenario.id}
+                className={`scenario-item ${selectedScenario === scenario.id ? 'selected' : ''}`}
+                onClick={() => setSelectedScenario(scenario.id)}
+              >
+                {scenario.name} ({scenario.type})
+                <div className="scenario-description">{scenario.description}</div>
+              </div>
+            ))
+          ) : (
+            <div className="no-data">No scenarios available</div>
+          )}
         </div>
       </div>
 

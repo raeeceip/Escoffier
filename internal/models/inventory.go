@@ -17,6 +17,28 @@ type InventoryItem struct {
 	Location    string
 	Status      string
 	Notes       string
+
+	// Quality check fields
+	Temperature      float64
+	Color            string
+	Texture          string
+	Smell            string
+	Firmness         string
+	Bruises          int
+	Mold             bool
+	Pests            bool
+	PackageType      string
+	PackageIntact    bool
+	PackageBulging   bool
+	VacuumIntact     bool
+	StorageType      string
+	Humidity         float64
+	Contaminants     bool
+	Eyes             string // For fish quality checks
+	RequiresGrilling bool
+	RequiresSauteing bool
+	RequiresBaking   bool
+	Complexity       int
 }
 
 // InventoryCategory represents the category of an inventory item
