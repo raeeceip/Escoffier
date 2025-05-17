@@ -1,17 +1,13 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
+	"masterchef/internal/database"
+	"masterchef/internal/models"
 	"net/http"
-)
 
-// Agent represents an agent in the kitchen
-type Agent struct {
-	ID    uint   `json:"id"`
-	Name  string `json:"name"`
-	Role  string `json:"role"`
-	State string `json:"state"`
-}
+	"github.com/gin-gonic/gin"
+	_ "github.com/mattn/go-sqlite3" // SQLite driver
+)
 
 // InitializeAgentRoutes initializes the agent interaction routes
 func InitializeAgentRoutes(router *gin.Engine) {
@@ -23,25 +19,26 @@ func InitializeAgentRoutes(router *gin.Engine) {
 
 // GetAgents handles GET requests to retrieve all agents
 func GetAgents(c *gin.Context) {
-	var agents []Agent
-	db.Find(&agents)
+	var agents []models.Agent
+	database.GetDB().Find(&agents)
 	c.JSON(http.StatusOK, agents)
 }
 
 // CreateAgent handles POST requests to create a new agent
 func CreateAgent(c *gin.Context) {
-	var agent Agent
+	var agent models.Agent
 	if err := c.ShouldBindJSON(&agent); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.Create(&agent)
+	database.GetDB().Create(&agent)
 	c.JSON(http.StatusCreated, agent)
 }
 
 // UpdateAgent handles PUT requests to update an existing agent
 func UpdateAgent(c *gin.Context) {
-	var agent Agent
+	var agent models.Agent
+	db := database.GetDB()
 	if err := db.Where("id = ?", c.Param("id")).First(&agent).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
@@ -56,7 +53,8 @@ func UpdateAgent(c *gin.Context) {
 
 // DeleteAgent handles DELETE requests to delete an agent
 func DeleteAgent(c *gin.Context) {
-	var agent Agent
+	var agent models.Agent
+	db := database.GetDB()
 	if err := db.Where("id = ?", c.Param("id")).First(&agent).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
 		return
@@ -66,7 +64,7 @@ func DeleteAgent(c *gin.Context) {
 }
 
 // ValidateAgentAction validates an agent's action based on kitchen rules
-func ValidateAgentAction(agent Agent, action string) bool {
+func ValidateAgentAction(agent models.Agent, action string) bool {
 	// Placeholder implementation for action validation
 	return true
 }

@@ -1,9 +1,16 @@
 package main
 
 import (
+	"fmt"
+	"masterchef/internal/database"
+	"masterchef/internal/models"
+	"time"
+
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
+	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
+
+var db *gorm.DB
 
 // Kitchen represents the state of the kitchen
 type Kitchen struct {
@@ -29,11 +36,22 @@ type EquipmentItem struct {
 
 // InitializeDatabase initializes the database schema
 func InitializeDatabase() {
-	db.AutoMigrate(&Kitchen{}, &InventoryItem{}, &EquipmentItem{})
+	db := database.GetDB()
+	db.AutoMigrate(
+		&Kitchen{},
+		&InventoryItem{},
+		&EquipmentItem{},
+		&models.Agent{},
+		&models.AgentActionLog{},
+		&models.EvaluationMetrics{},
+		&models.Order{},
+		&models.OrderItem{},
+	)
 }
 
 // GetKitchenState retrieves the current state of the kitchen
 func GetKitchenState() Kitchen {
+	db := database.GetDB()
 	var kitchen Kitchen
 	db.First(&kitchen)
 	db.Model(&kitchen).Related(&kitchen.Inventory)
@@ -43,11 +61,13 @@ func GetKitchenState() Kitchen {
 
 // UpdateKitchenState updates the state of the kitchen
 func UpdateKitchenState(kitchen Kitchen) {
+	db := database.GetDB()
 	db.Save(&kitchen)
 }
 
 // PerformKitchenAction performs a transactional kitchen action
 func PerformKitchenAction(action func()) {
+	db := database.GetDB()
 	tx := db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -56,4 +76,36 @@ func PerformKitchenAction(action func()) {
 	}()
 	action()
 	tx.Commit()
+}
+
+// InitDB initializes the database connection
+func InitDB(dbPath string) error {
+	var err error
+	db, err = gorm.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Enable GORM logging in development
+	db.LogMode(true)
+
+	// Configure connection pool
+	db.DB().SetMaxIdleConns(10)
+	db.DB().SetMaxOpenConns(100)
+	db.DB().SetConnMaxLifetime(time.Hour)
+
+	return nil
+}
+
+// GetDB returns the database instance
+func GetDB() *gorm.DB {
+	return db
+}
+
+// CloseDB closes the database connection
+func CloseDB() error {
+	if db != nil {
+		return db.Close()
+	}
+	return nil
 }
