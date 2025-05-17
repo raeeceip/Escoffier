@@ -8,6 +8,7 @@ import (
 	"masterchef/internal/agents"
 	"masterchef/internal/api"
 	"masterchef/internal/models"
+	"masterchef/internal/playground"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,9 +24,11 @@ import (
 )
 
 var (
-	port        = flag.Int("port", 8080, "API server port")
-	metricsPort = flag.Int("metrics-port", 9090, "Metrics server port")
-	configFile  = flag.String("config", "configs/config.yaml", "Path to configuration file")
+	port             = flag.Int("port", 8080, "API server port")
+	metricsPort      = flag.Int("metrics-port", 9090, "Metrics server port")
+	playgroundPort   = flag.Int("playground-port", 8090, "Playground server port")
+	configFile       = flag.String("config", "configs/config.yaml", "Path to configuration file")
+	enablePlayground = flag.Bool("enable-playground", true, "Enable LLM playground server")
 )
 
 // Database represents the application's database connection
@@ -119,6 +122,11 @@ func main() {
 	// Start metrics server if enabled
 	if config.MetricsConfig.Enabled {
 		go startMetricsServer(*metricsPort)
+	}
+
+	// Start playground server if enabled
+	if *enablePlayground {
+		go startPlaygroundServer(*playgroundPort)
 	}
 
 	// Start API server
@@ -215,6 +223,20 @@ func startMetricsServer(port int) {
 	log.Printf("Starting metrics server on port %d", port)
 	if err := metricsServer.ListenAndServe(); err != http.ErrServerClosed {
 		log.Printf("Metrics server error: %v", err)
+	}
+}
+
+func startPlaygroundServer(port int) {
+	playgroundServer := playground.NewPlaygroundServer()
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: playgroundServer.Router(),
+	}
+
+	log.Printf("Starting LLM playground server on port %d", port)
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		log.Printf("Playground server error: %v", err)
 	}
 }
 

@@ -1,234 +1,140 @@
 # MasterChef-Bench
 
-MasterChef-Bench is a multi-agent system benchmark for evaluating LLM-based agents in a simulated kitchen environment. The system implements a hierarchical structure of agents that must coordinate to handle kitchen operations, from menu planning to order fulfillment.
+A comprehensive benchmarking tool for large language models in kitchen management scenarios.
+
+## Overview
+
+MasterChef-Bench evaluates LLMs on their ability to perform complex real-world tasks in a simulated kitchen environment. The benchmark tests role coherence, task completion, coordination, and other metrics across multiple roles in a kitchen hierarchy.
 
 ## Features
 
-- **Hierarchical Agent System**: Multiple agents with distinct roles and responsibilities
+- Multi-agent evaluation framework for kitchen management
+- Role-based testing with hierarchical relationships
+- Real-time visualization of agent interactions
+- Standardized benchmarking scenarios
+- Performance metrics and reporting
+- LLM Playground for interactive testing
 
-  - Executive Chef: Overall kitchen management and coordination
-  - Sous Chefs: Station management and order execution
-  - Specialized Roles: Prep cooks, line cooks, etc.
+## Getting Started
 
-- **Comprehensive Evaluation Metrics**:
+### Prerequisites
 
-  - Role Coherence
-  - Task Completion
-  - Coordination Efficiency
-  - Long-term Consistency
-  - Resource Utilization
+- Go 1.17+
+- Node.js 14+ (for frontend)
+- Docker (optional, for containerized deployment)
+- API keys for LLMs (OpenAI, Anthropic, etc.)
 
-- **Real-time Monitoring**:
+### Installation
 
-  - Prometheus integration for metrics collection
-  - Grafana dashboards for visualization
-  - Detailed logging and performance tracking
-
-- **Flexible Configuration**:
-  - YAML-based configuration
-  - Environment variable support
-  - Pluggable components
-
-## Prerequisites
-
-- Go 1.21 or later
-- PostgreSQL 14 or later
-- Redis 7.0 or later
-- Docker (optional)
-
-## Installation
-
-1. Clone the repository:
+Clone the repository:
 
 ```bash
 git clone https://github.com/yourusername/masterchef-bench.git
 cd masterchef-bench
 ```
 
-2. Install dependencies:
+Install Go dependencies:
 
 ```bash
 go mod download
 ```
 
-3. Set up the configuration:
+Install frontend dependencies:
 
 ```bash
-cp configs/config.yaml.example configs/config.yaml
-# Edit configs/config.yaml with your settings
+cd frontend
+npm install
+cd ..
 ```
 
-4. Set up environment variables:
+### Configuration
+
+Set up your environment variables:
 
 ```bash
-export OPENAI_API_KEY="your-api-key"
-export DATABASE_URL="postgresql://user:password@localhost:5432/masterchef"
+export OPENAI_API_KEY=your_openai_key
+export ANTHROPIC_API_KEY=your_anthropic_key
+export GOOGLE_API_KEY=your_google_key
 ```
 
-## Running the Benchmark
+Or create a `.env` file in the root directory.
 
-1. Start the services:
+### Running the Backend
 
-```bash
-# Using Docker
-docker-compose up -d
-
-# Or manually start PostgreSQL and Redis
-```
-
-2. Run the application:
+Start the main backend server:
 
 ```bash
 go run cmd/main.go
 ```
 
-3. Access the API:
+### Running the Frontend
+
+In a separate terminal:
 
 ```bash
-curl http://localhost:8080/api/v1/kitchen/status
+cd frontend
+npm start
 ```
 
-4. View metrics:
+### Using the CLI
+
+For command-line interaction:
 
 ```bash
-curl http://localhost:9090/metrics
+cd cli
+go run main.go
 ```
 
-## API Endpoints
+## LLM Playground
 
-### Order Management
+The LLM Playground provides an interactive environment for testing and comparing different LLMs.
 
-- `POST /api/v1/orders`: Create a new order
-- `GET /api/v1/orders/:id`: Get order status
-- `PUT /api/v1/orders/:id`: Update order
-- `DELETE /api/v1/orders/:id`: Cancel order
+### Starting the Playground
 
-### Kitchen Operations
+Option 1: Using the CLI tool:
 
-- `GET /api/v1/kitchen/status`: Get kitchen status
-- `POST /api/v1/kitchen/prep`: Start preparation
-- `POST /api/v1/kitchen/cook`: Start cooking
-- `POST /api/v1/kitchen/plate`: Start plating
+1. Run `go run cli/main.go`
+2. Select "LLM Playground" from the main menu
+3. Follow the on-screen instructions to access the web interface
 
-### Inventory Management
-
-- `GET /api/v1/inventory`: Get inventory levels
-- `POST /api/v1/inventory/update`: Update inventory
-- `POST /api/v1/inventory/order`: Order supplies
-
-### Staff Management
-
-- `GET /api/v1/staff`: Get staff status
-- `POST /api/v1/staff/assign`: Assign staff to tasks
-
-## Configuration
-
-The system can be configured through `configs/config.yaml`. Key configuration sections include:
-
-- API settings
-- Database connections
-- Agent configurations
-- Evaluation parameters
-- Metrics collection
-- Memory systems
-
-See the [Configuration Guide](docs/configuration.md) for detailed settings.
-
-## Evaluation Metrics
-
-### Role Coherence
-
-Measures how well agents maintain their assigned roles and responsibilities:
-
-- Knowledge consistency
-- Authority adherence
-- Task appropriateness
-
-### Task Completion
-
-Evaluates the effectiveness of task execution:
-
-- Completion rate
-- Time efficiency
-- Quality score
-
-### Coordination
-
-Assesses inter-agent communication and cooperation:
-
-- Communication efficiency
-- Resource utilization
-- Conflict resolution
-
-### Long-term Consistency
-
-Tracks sustained performance over time:
-
-- Decision consistency
-- Learning progression
-- Adaptation capability
-
-## Development
-
-### Adding New Agents
-
-1. Create a new agent type in `internal/agents/`:
-
-```go
-type NewAgent struct {
-    *Agent
-    // Additional fields
-}
-```
-
-2. Implement the agent interface:
-
-```go
-func (a *NewAgent) HandleTask(ctx context.Context, task Task) error {
-    // Implementation
-}
-```
-
-### Adding New Metrics
-
-1. Define the metric in `internal/evaluation/metrics.go`:
-
-```go
-var newMetric = prometheus.NewGaugeVec(
-    prometheus.GaugeOpts{
-        Name: "new_metric_name",
-        Help: "Description",
-    },
-    []string{"label1", "label2"},
-)
-```
-
-2. Register the metric in `NewMetricsCollector()`.
-
-### Running Tests
+Option 2: Running directly:
 
 ```bash
-# Run all tests
-go test ./...
-
-# Run specific tests
-go test ./internal/agents -run TestExecutiveChef
-
-# Run with race detection
-go test -race ./...
+go run cmd/main.go --enable-playground --playground-port 8090
 ```
+
+### Accessing the Playground
+
+Once running, access the playground at:
+
+- Web interface: http://localhost:8090
+- API endpoint: http://localhost:8090/api
+- WebSocket: ws://localhost:8090/ws
+
+### Features
+
+- Test multiple LLMs on different kitchen scenarios
+- Real-time evaluation and metrics
+- Visual comparison of model performance
+- Detailed logs of agent interactions
+- Export reports for further analysis
+
+## Benchmarking Scenarios
+
+- **Busy Night**: High-volume service with double the normal orders
+- **Overstocked Kitchen**: Managing excess inventory with expiry concerns
+- **Slow Business**: Optimizing operations during low customer volume
+- **Low Inventory**: Handling service with critically low ingredient stock
+- **High Labor Cost**: Managing an overstaffed kitchen efficiently
+- **Quality Control**: Maintaining standards during normal service volume
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 

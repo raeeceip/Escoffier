@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"masterchef/internal/models"
 	"net/http"
 	"time"
 )
@@ -63,6 +62,48 @@ type EquipmentItem struct {
 	Status string `json:"status"`
 }
 
+// Agent represents a kitchen agent
+type Agent struct {
+	ID          uint     `json:"id"`
+	Name        string   `json:"name"`
+	Role        string   `json:"role"`
+	Station     string   `json:"station"`
+	Status      string   `json:"status"`
+	Skills      []string `json:"skills"`
+	Performance float64  `json:"performance"`
+}
+
+// Order represents a customer order
+type Order struct {
+	ID            uint        `json:"id"`
+	Type          string      `json:"type"`
+	Items         []OrderItem `json:"items"`
+	Status        string      `json:"status"`
+	Priority      int         `json:"priority"`
+	TimeReceived  time.Time   `json:"time_received"`
+	TimeCompleted time.Time   `json:"time_completed,omitempty"`
+	AssignedTo    string      `json:"assigned_to,omitempty"`
+	EstimatedTime int         `json:"estimated_time"`
+	Notes         string      `json:"notes,omitempty"`
+}
+
+// OrderItem represents an item in an order
+type OrderItem struct {
+	ID                uint     `json:"id"`
+	OrderID           uint     `json:"order_id"`
+	Name              string   `json:"name"`
+	Quantity          int      `json:"quantity"`
+	Notes             string   `json:"notes,omitempty"`
+	Status            string   `json:"status"`
+	PrepTime          int      `json:"prep_time"`
+	CookTime          int      `json:"cook_time"`
+	RequiredEquipment []string `json:"required_equipment"`
+	Ingredients       []string `json:"ingredients"`
+	Category          string   `json:"category"`
+	Price             float64  `json:"price"`
+	IsSpecialty       bool     `json:"is_specialty"`
+}
+
 // GetKitchenState retrieves the current kitchen state
 func (c *ApiClient) GetKitchenState() (*Kitchen, error) {
 	resp, err := c.httpClient.Get(baseURL + "/kitchen")
@@ -111,7 +152,7 @@ func (c *ApiClient) UpdateKitchenState(kitchen *Kitchen) error {
 }
 
 // GetAgents retrieves all agents
-func (c *ApiClient) GetAgents() ([]models.Agent, error) {
+func (c *ApiClient) GetAgents() ([]Agent, error) {
 	resp, err := c.httpClient.Get(baseURL + "/agents")
 	if err != nil {
 		return nil, err
@@ -122,7 +163,7 @@ func (c *ApiClient) GetAgents() ([]models.Agent, error) {
 		return nil, fmt.Errorf("failed to get agents with status code: %d", resp.StatusCode)
 	}
 
-	var agents []models.Agent
+	var agents []Agent
 	if err := json.NewDecoder(resp.Body).Decode(&agents); err != nil {
 		return nil, err
 	}
@@ -131,7 +172,7 @@ func (c *ApiClient) GetAgents() ([]models.Agent, error) {
 }
 
 // CreateAgent creates a new agent
-func (c *ApiClient) CreateAgent(agent *models.Agent) error {
+func (c *ApiClient) CreateAgent(agent *Agent) error {
 	data, err := json.Marshal(agent)
 	if err != nil {
 		return err
@@ -152,6 +193,131 @@ func (c *ApiClient) CreateAgent(agent *models.Agent) error {
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := ioutil.ReadAll(resp.Body)
 		return fmt.Errorf("failed to create agent: %s", string(body))
+	}
+
+	return nil
+}
+
+// GetOrders retrieves all orders with optional filter
+func (c *ApiClient) GetOrders(status string) ([]Order, error) {
+	url := baseURL + "/orders"
+	if status != "" {
+		url += fmt.Sprintf("?status=%s", status)
+	}
+
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get orders with status code: %d", resp.StatusCode)
+	}
+
+	var orders []Order
+	if err := json.NewDecoder(resp.Body).Decode(&orders); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+// GetOrder retrieves a specific order by ID
+func (c *ApiClient) GetOrder(id uint) (*Order, error) {
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/orders/%d", baseURL, id))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get order with status code: %d", resp.StatusCode)
+	}
+
+	var order Order
+	if err := json.NewDecoder(resp.Body).Decode(&order); err != nil {
+		return nil, err
+	}
+
+	return &order, nil
+}
+
+// CreateOrder creates a new order
+func (c *ApiClient) CreateOrder(order *Order) (*Order, error) {
+	data, err := json.Marshal(order)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", baseURL+"/orders", bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create order: %s", string(body))
+	}
+
+	var createdOrder Order
+	if err := json.NewDecoder(resp.Body).Decode(&createdOrder); err != nil {
+		return nil, err
+	}
+
+	return &createdOrder, nil
+}
+
+// UpdateOrder updates an existing order
+func (c *ApiClient) UpdateOrder(order *Order) error {
+	data, err := json.Marshal(order)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/orders/%d", baseURL, order.ID), bytes.NewBuffer(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("failed to update order: %s", string(body))
+	}
+
+	return nil
+}
+
+// CancelOrder cancels an order by ID
+func (c *ApiClient) CancelOrder(id uint) error {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/orders/%d", baseURL, id), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("failed to cancel order: %s", string(body))
 	}
 
 	return nil
