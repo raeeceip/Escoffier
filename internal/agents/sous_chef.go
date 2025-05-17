@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
-	"masterchef-bench/internal/models"
+	"masterchef/internal/models"
 
 	"github.com/tmc/langchaingo/llms"
 )
@@ -454,12 +455,34 @@ func (sc *SousChef) calculateRequiredStaff(load int) int {
 }
 
 func (sc *SousChef) requestAdditionalStaff(ctx context.Context, count int) error {
-	// Implement staff request logic
+	// Record staff request
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "staff_request",
+		Content:   fmt.Sprintf("Requested %d additional staff members", count),
+		Metadata: map[string]interface{}{
+			"count":   count,
+			"station": sc.Station,
+		},
+	})
+
+	// TODO: Implement actual staff request logic through HR system
 	return nil
 }
 
 func (sc *SousChef) releaseExcessStaff(ctx context.Context, count int) error {
-	// Implement staff release logic
+	// Record staff release
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "staff_release",
+		Content:   fmt.Sprintf("Released %d staff members", count),
+		Metadata: map[string]interface{}{
+			"count":   count,
+			"station": sc.Station,
+		},
+	})
+
+	// TODO: Implement actual staff release logic through HR system
 	return nil
 }
 
@@ -491,7 +514,38 @@ func (sc *SousChef) checkOrderProgress(ctx context.Context, order models.Order) 
 }
 
 func (sc *SousChef) handleOrderDelay(ctx context.Context, order models.Order, progress OrderProgress) error {
-	// Implement delay handling logic
+	// Record delay
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "order_delay",
+		Content:   fmt.Sprintf("Order %s is delayed by %d minutes", order.ID, progress.DelayMinutes),
+		Metadata: map[string]interface{}{
+			"order_id":      order.ID,
+			"delay_minutes": progress.DelayMinutes,
+			"stage":         progress.Stage,
+			"issues":        progress.Issues,
+		},
+	})
+
+	// Increase priority
+	order.Priority++
+
+	// Reassign if necessary
+	if order.Priority > 8 {
+		newAssignee := sc.selectBestAssignee(Task{
+			ID:          order.ID,
+			Type:        "order_recovery",
+			Description: "Recover delayed order",
+			Priority:    order.Priority,
+			Metadata: map[string]interface{}{
+				"order_id": order.ID,
+			},
+		})
+		if newAssignee != nil {
+			order.AssignedTo = newAssignee.ID
+		}
+	}
+
 	return nil
 }
 
@@ -692,25 +746,228 @@ func (sc *SousChef) handleTaskIssues(ctx context.Context, task Task, status Task
 }
 
 func (sc *SousChef) resolveTaskIssue(ctx context.Context, task Task, issue string) error {
-	// Implement issue resolution logic
-	return nil
+	// Record issue resolution attempt
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "issue_resolution",
+		Content:   fmt.Sprintf("Attempting to resolve issue '%s' for task %s", issue, task.ID),
+		Metadata: map[string]interface{}{
+			"task_id": task.ID,
+			"issue":   issue,
+		},
+	})
+
+	// Handle different types of issues
+	switch {
+	case strings.Contains(issue, "delay"):
+		return sc.handleTaskDelay(ctx, task)
+	case strings.Contains(issue, "quality"):
+		return sc.handleQualityIssue(ctx, task)
+	case strings.Contains(issue, "equipment"):
+		return sc.handleEquipmentIssue(ctx, task)
+	case strings.Contains(issue, "staff"):
+		return sc.handleStaffingIssue(ctx, task)
+	default:
+		return fmt.Errorf("unknown issue type: %s", issue)
+	}
 }
 
 func (sc *SousChef) getTaskCompletion(task Task) (float64, error) {
-	// Implement task completion calculation
-	return 0.0, nil
-}
-
-func (sc *SousChef) isTaskDelayed(task Task) bool {
-	if task.EndTime.IsZero() {
-		return false
+	// Get completion percentage from task metadata
+	if completion, ok := task.Metadata["completion"].(float64); ok {
+		return completion, nil
 	}
-	return time.Now().After(task.EndTime)
+
+	// Calculate completion based on subtasks
+	if subtasks, ok := task.Metadata["subtasks"].([]Task); ok {
+		var completed int
+		for _, subtask := range subtasks {
+			if subtask.Status == "completed" {
+				completed++
+			}
+		}
+		return float64(completed) / float64(len(subtasks)), nil
+	}
+
+	return 0.0, fmt.Errorf("unable to determine task completion")
 }
 
-func (sc *SousChef) checkTaskQuality(task Task) []string {
-	// Implement task quality checking
+func (sc *SousChef) handleTaskDelay(ctx context.Context, task Task) error {
+	// Increase task priority
+	task.Priority++
+
+	// Reassign task if needed
+	if task.Priority > 8 {
+		newAssignee := sc.selectBestAssignee(task)
+		if newAssignee != nil {
+			task.Metadata["original_assignee"] = task.Metadata["assignee"]
+			task.Metadata["assignee"] = newAssignee.ID
+		}
+	}
+
+	// Record resolution attempt
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "delay_resolution",
+		Content:   fmt.Sprintf("Handled delay for task %s", task.ID),
+		Metadata: map[string]interface{}{
+			"task_id":  task.ID,
+			"priority": task.Priority,
+		},
+	})
+
 	return nil
+}
+
+func (sc *SousChef) handleQualityIssue(ctx context.Context, task Task) error {
+	// Record quality issue
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "quality_issue",
+		Content:   fmt.Sprintf("Handling quality issue for task %s", task.ID),
+		Metadata: map[string]interface{}{
+			"task_id": task.ID,
+			"issue":   "quality",
+		},
+	})
+
+	// Assign experienced staff member to review
+	reviewer := sc.selectBestAssignee(Task{
+		Type:     "quality_review",
+		Priority: task.Priority + 1,
+	})
+	if reviewer != nil {
+		task.Metadata["reviewer"] = reviewer.ID
+	}
+
+	return nil
+}
+
+func (sc *SousChef) handleEquipmentIssue(ctx context.Context, task Task) error {
+	// Record equipment issue
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_issue",
+		Content:   fmt.Sprintf("Handling equipment issue for task %s", task.ID),
+		Metadata: map[string]interface{}{
+			"task_id": task.ID,
+			"issue":   "equipment",
+		},
+	})
+
+	// Request equipment maintenance
+	if equipment, ok := task.Metadata["equipment"].(string); ok {
+		task.Metadata["maintenance_requested"] = true
+		task.Metadata["equipment_status"] = "pending_maintenance"
+		task.Status = "blocked"
+	}
+
+	return nil
+}
+
+func (sc *SousChef) handleStaffingIssue(ctx context.Context, task Task) error {
+	// Record staffing issue
+	sc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "staffing_issue",
+		Content:   fmt.Sprintf("Handling staffing issue for task %s", task.ID),
+		Metadata: map[string]interface{}{
+			"task_id": task.ID,
+			"issue":   "staffing",
+		},
+	})
+
+	// Request additional staff if needed
+	currentStaff := len(sc.StaffMembers)
+	requiredStaff := sc.calculateRequiredStaff(sc.getCurrentLoad())
+	if currentStaff < requiredStaff {
+		if err := sc.requestAdditionalStaff(ctx, requiredStaff-currentStaff); err != nil {
+			return fmt.Errorf("failed to request additional staff: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (sc *SousChef) getCurrentLoad() int {
+	var load int
+	for _, order := range sc.ActiveOrders {
+		load += len(order.Items)
+	}
+	return load
+}
+
+func (sc *SousChef) createPrepTasks(item models.MenuItem) []Task {
+	var tasks []Task
+
+	// Create prep tasks based on item requirements
+	for i, ingredient := range item.Ingredients {
+		tasks = append(tasks, Task{
+			ID:          fmt.Sprintf("prep_%s_%d", item.Name, i),
+			Type:        "ingredient_prep",
+			Description: fmt.Sprintf("Prepare %s for %s", ingredient, item.Name),
+			Priority:    1,
+			Status:      "pending",
+			StartTime:   time.Now(),
+			Metadata: map[string]interface{}{
+				"ingredient": ingredient,
+				"item":       item.Name,
+			},
+		})
+	}
+
+	return tasks
+}
+
+func (sc *SousChef) createCookingTasks(item models.MenuItem) []Task {
+	var tasks []Task
+
+	// Create cooking tasks based on item requirements
+	tasks = append(tasks, Task{
+		ID:          fmt.Sprintf("cook_%s", item.Name),
+		Type:        "cooking",
+		Description: fmt.Sprintf("Cook %s", item.Name),
+		Priority:    2,
+		Status:      "pending",
+		StartTime:   time.Now(),
+		Metadata: map[string]interface{}{
+			"item":     item.Name,
+			"duration": item.CookTime,
+		},
+	})
+
+	return tasks
+}
+
+func (sc *SousChef) createPlatingTasks(item models.MenuItem) []Task {
+	var tasks []Task
+
+	// Create plating tasks based on item requirements
+	tasks = append(tasks, Task{
+		ID:          fmt.Sprintf("plate_%s", item.Name),
+		Type:        "plating",
+		Description: fmt.Sprintf("Plate %s", item.Name),
+		Priority:    3,
+		Status:      "pending",
+		StartTime:   time.Now(),
+		Metadata: map[string]interface{}{
+			"item": item.Name,
+		},
+	})
+
+	return tasks
+}
+
+func (sc *SousChef) getOrderTasks(order models.Order) []Task {
+	var tasks []Task
+	for _, staff := range sc.StaffMembers {
+		for _, task := range staff.memory.TaskQueue {
+			if orderID, ok := task.Metadata["order_id"].(string); ok && orderID == order.ID {
+				tasks = append(tasks, task)
+			}
+		}
+	}
+	return tasks
 }
 
 func (sc *SousChef) checkTemperature(order models.Order) bool {
@@ -773,29 +1030,14 @@ func (sc *SousChef) calculateTotalPrepTime(order models.Order) time.Duration {
 	return total
 }
 
-func (sc *SousChef) createPrepTasks(item models.MenuItem) []Task {
-	// Implement prep task creation
-	return nil
-}
-
-func (sc *SousChef) createCookingTasks(item models.MenuItem) []Task {
-	// Implement cooking task creation
-	return nil
-}
-
-func (sc *SousChef) createPlatingTasks(item models.MenuItem) []Task {
-	// Implement plating task creation
-	return nil
-}
-
-func (sc *SousChef) getOrderTasks(order models.Order) []Task {
-	var tasks []Task
-	for _, staff := range sc.StaffMembers {
-		for _, task := range staff.memory.TaskQueue {
-			if orderID, ok := task.Metadata["order_id"].(string); ok && orderID == order.ID {
-				tasks = append(tasks, task)
-			}
-		}
+func (sc *SousChef) isTaskDelayed(task Task) bool {
+	if task.EndTime.IsZero() {
+		return false
 	}
-	return tasks
+	return time.Now().After(task.EndTime)
+}
+
+func (sc *SousChef) checkTaskQuality(task Task) []string {
+	// Implement task quality checking
+	return nil
 }

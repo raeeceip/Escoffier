@@ -203,18 +203,18 @@ func (ec *ExecutiveChef) getSeasonalIngredients(ctx context.Context) []models.Me
 
 	// Define seasonal ingredients by month
 	seasonalMap := map[time.Month][]string{
-		time.December:  {"winter squash", "citrus", "root vegetables"},
-		time.January:   {"winter squash", "citrus", "root vegetables"},
-		time.February:  {"winter squash", "citrus", "root vegetables"},
-		time.March:     {"spring peas", "asparagus", "artichokes"},
-		time.April:     {"spring peas", "asparagus", "artichokes"},
-		time.May:       {"spring peas", "asparagus", "artichokes"},
-		time.June:      {"tomatoes", "zucchini", "berries"},
-		time.July:      {"tomatoes", "zucchini", "berries"},
-		time.August:    {"tomatoes", "zucchini", "berries"},
-		time.September: {"apples", "pears", "mushrooms"},
-		time.October:   {"apples", "pears", "mushrooms"},
-		time.November:  {"apples", "pears", "mushrooms"},
+		time.December:  {"winter squash", "citrus", "root vegetables", "kale", "brussels sprouts"},
+		time.January:   {"winter squash", "citrus", "root vegetables", "kale", "brussels sprouts"},
+		time.February:  {"winter squash", "citrus", "root vegetables", "kale", "brussels sprouts"},
+		time.March:     {"spring peas", "asparagus", "artichokes", "spring onions", "radishes"},
+		time.April:     {"spring peas", "asparagus", "artichokes", "spring onions", "radishes"},
+		time.May:       {"spring peas", "asparagus", "artichokes", "spring onions", "radishes"},
+		time.June:      {"tomatoes", "zucchini", "berries", "corn", "eggplant"},
+		time.July:      {"tomatoes", "zucchini", "berries", "corn", "eggplant"},
+		time.August:    {"tomatoes", "zucchini", "berries", "corn", "eggplant"},
+		time.September: {"apples", "pears", "mushrooms", "pumpkin", "grapes"},
+		time.October:   {"apples", "pears", "mushrooms", "pumpkin", "grapes"},
+		time.November:  {"apples", "pears", "mushrooms", "pumpkin", "grapes"},
 	}
 
 	// Get seasonal ingredients for current month

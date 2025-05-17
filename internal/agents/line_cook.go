@@ -245,7 +245,7 @@ func (lc *LineCook) applyTechnique(ctx context.Context, step models.CookingStep)
 // monitorTemperature monitors and adjusts cooking temperature
 func (lc *LineCook) monitorTemperature(ctx context.Context, temp *models.TemperatureMonitor) error {
 	// Set up temperature monitoring
-	interval := time.Duration(temp.GetInterval()) * time.Second
+	interval := time.Duration(temp.CheckInterval) * time.Second
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
 
@@ -255,17 +255,16 @@ func (lc *LineCook) monitorTemperature(ctx context.Context, temp *models.Tempera
 			return ctx.Err()
 		case <-timer.C:
 			// Check current temperature
-			currentTemp := temp.Current
-			if currentTemp < temp.GetMin() || currentTemp > temp.GetMax() {
+			if temp.Current < temp.MinTemp || temp.Current > temp.MaxTemp {
 				// Record temperature issue
 				lc.AddMemory(ctx, Event{
 					Timestamp: time.Now(),
 					Type:      "temperature_alert",
-					Content:   fmt.Sprintf("Temperature out of range: %.1f°C", currentTemp),
+					Content:   fmt.Sprintf("Temperature out of range: %.1f°%s", temp.Current, temp.Unit),
 					Metadata: map[string]interface{}{
-						"current": currentTemp,
-						"min":     temp.GetMin(),
-						"max":     temp.GetMax(),
+						"current": temp.Current,
+						"min":     temp.MinTemp,
+						"max":     temp.MaxTemp,
 					},
 				})
 
@@ -412,81 +411,606 @@ func (lc *LineCook) organizeTools(ctx context.Context) error {
 // Helper functions
 
 func (lc *LineCook) verifyCondition(equipment, condition string) bool {
-	// Implement actual condition verification logic
-	return true
+	// Check equipment condition based on type
+	switch condition {
+	case "temperature":
+		return lc.checkTemperature(equipment)
+	case "cleanliness":
+		return lc.checkCleanliness(equipment)
+	case "maintenance":
+		return lc.checkMaintenance(equipment)
+	default:
+		return false
+	}
 }
 
 func (lc *LineCook) preClean(equipment string) error {
-	// Implement pre-cleaning logic
+	// Record cleaning start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_cleaning_start",
+		Content:   fmt.Sprintf("Started pre-cleaning %s", equipment),
+		Metadata: map[string]interface{}{
+			"equipment": equipment,
+			"stage":     "pre_clean",
+		},
+	})
+
+	// Remove loose debris
+	if err := lc.removeLargeDebris(equipment); err != nil {
+		return fmt.Errorf("failed to remove debris: %w", err)
+	}
+
+	// Initial rinse
+	if err := lc.initialRinse(equipment); err != nil {
+		return fmt.Errorf("failed initial rinse: %w", err)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) wash(equipment string) error {
-	// Implement washing logic
+	// Record washing start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_washing",
+		Content:   fmt.Sprintf("Washing %s", equipment),
+		Metadata: map[string]interface{}{
+			"equipment": equipment,
+			"stage":     "wash",
+		},
+	})
+
+	// Apply cleaning solution
+	if err := lc.applyCleaner(equipment); err != nil {
+		return fmt.Errorf("failed to apply cleaner: %w", err)
+	}
+
+	// Scrub equipment
+	if err := lc.scrub(equipment); err != nil {
+		return fmt.Errorf("failed to scrub: %w", err)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) rinse(equipment string) error {
-	// Implement rinsing logic
+	// Record rinsing start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_rinsing",
+		Content:   fmt.Sprintf("Rinsing %s", equipment),
+		Metadata: map[string]interface{}{
+			"equipment": equipment,
+			"stage":     "rinse",
+		},
+	})
+
+	// Rinse with clean water
+	if err := lc.rinseWithWater(equipment); err != nil {
+		return fmt.Errorf("failed to rinse: %w", err)
+	}
+
+	// Check for soap residue
+	if lc.hasSoapResidue(equipment) {
+		if err := lc.rinseWithWater(equipment); err != nil {
+			return fmt.Errorf("failed to remove soap residue: %w", err)
+		}
+	}
+
 	return nil
 }
 
 func (lc *LineCook) sanitize(equipment string) error {
-	// Implement sanitization logic
+	// Record sanitization start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_sanitizing",
+		Content:   fmt.Sprintf("Sanitizing %s", equipment),
+		Metadata: map[string]interface{}{
+			"equipment": equipment,
+			"stage":     "sanitize",
+		},
+	})
+
+	// Apply sanitizer
+	if err := lc.applySanitizer(equipment); err != nil {
+		return fmt.Errorf("failed to apply sanitizer: %w", err)
+	}
+
+	// Wait for required contact time
+	time.Sleep(30 * time.Second)
+
 	return nil
 }
 
 func (lc *LineCook) dry(equipment string) error {
-	// Implement drying logic
-	return nil
+	// Record drying start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "equipment_drying",
+		Content:   fmt.Sprintf("Drying %s", equipment),
+		Metadata: map[string]interface{}{
+			"equipment": equipment,
+			"stage":     "dry",
+		},
+	})
+
+	// Air dry or use clean towels
+	if lc.requiresAirDrying(equipment) {
+		return lc.airDry(equipment)
+	}
+	return lc.towelDry(equipment)
 }
 
 func (lc *LineCook) cleanSurface(surface string) error {
-	// Implement surface cleaning logic
+	// Record surface cleaning start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "surface_cleaning",
+		Content:   fmt.Sprintf("Cleaning surface: %s", surface),
+		Metadata: map[string]interface{}{
+			"surface": surface,
+			"stage":   "clean",
+		},
+	})
+
+	// Clear surface
+	if err := lc.clearSurface(surface); err != nil {
+		return fmt.Errorf("failed to clear surface: %w", err)
+	}
+
+	// Clean surface
+	if err := lc.wipeDown(surface); err != nil {
+		return fmt.Errorf("failed to wipe down surface: %w", err)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) applySanitizer(surface string) error {
-	// Implement sanitizer application logic
+	// Record sanitizer application
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "sanitizer_application",
+		Content:   fmt.Sprintf("Applying sanitizer to %s", surface),
+		Metadata: map[string]interface{}{
+			"surface": surface,
+			"stage":   "sanitize",
+		},
+	})
+
+	// Apply sanitizer solution
+	if err := lc.spraySanitizer(surface); err != nil {
+		return fmt.Errorf("failed to apply sanitizer: %w", err)
+	}
+
+	// Ensure even coverage
+	if err := lc.spreadSanitizer(surface); err != nil {
+		return fmt.Errorf("failed to spread sanitizer: %w", err)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) waitForDrying(surface string) error {
-	// Implement drying wait logic
+	// Record drying wait start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "surface_drying",
+		Content:   fmt.Sprintf("Waiting for %s to dry", surface),
+		Metadata: map[string]interface{}{
+			"surface": surface,
+			"stage":   "dry",
+		},
+	})
+
+	// Wait for surface to dry
+	time.Sleep(5 * time.Minute)
+
+	// Verify dryness
+	if !lc.isSurfaceDry(surface) {
+		return fmt.Errorf("surface %s is still wet", surface)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) cleanTool(tool string) error {
-	// Implement tool cleaning logic
-	return nil
+	// Record tool cleaning start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "tool_cleaning",
+		Content:   fmt.Sprintf("Cleaning tool: %s", tool),
+		Metadata: map[string]interface{}{
+			"tool":  tool,
+			"stage": "clean",
+		},
+	})
+
+	// Clean tool based on type
+	switch lc.getToolType(tool) {
+	case "knife":
+		return lc.cleanKnife(tool)
+	case "utensil":
+		return lc.cleanUtensil(tool)
+	case "container":
+		return lc.cleanContainer(tool)
+	default:
+		return fmt.Errorf("unknown tool type: %s", tool)
+	}
 }
 
 func (lc *LineCook) storeTool(tool, location string) error {
-	// Implement tool storage logic
+	// Record tool storage start
+	lc.AddMemory(context.Background(), Event{
+		Timestamp: time.Now(),
+		Type:      "tool_storage",
+		Content:   fmt.Sprintf("Storing tool %s in %s", tool, location),
+		Metadata: map[string]interface{}{
+			"tool":     tool,
+			"location": location,
+			"stage":    "store",
+		},
+	})
+
+	// Verify storage location is appropriate
+	if !lc.isValidStorage(tool, location) {
+		return fmt.Errorf("invalid storage location %s for tool %s", location, tool)
+	}
+
+	// Store tool
+	if err := lc.placeTool(tool, location); err != nil {
+		return fmt.Errorf("failed to store tool: %w", err)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) adjustTemperature(ctx context.Context, temp *models.TemperatureMonitor) error {
-	// Implement temperature adjustment logic
+	// Record temperature adjustment start
+	lc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "temperature_adjustment",
+		Content:   fmt.Sprintf("Adjusting temperature to %d°F", temp.Current),
+		Metadata: map[string]interface{}{
+			"current": temp.Current,
+			"min":     temp.MinTemp,
+			"max":     temp.MaxTemp,
+			"stage":   "adjust",
+		},
+	})
+
+	// Adjust temperature gradually
+	targetTemp := (temp.MinTemp + temp.MaxTemp) / 2 // Aim for middle of range
+	for temp.Current != targetTemp {
+		if temp.Current < targetTemp {
+			temp.Current += 5
+		} else {
+			temp.Current -= 5
+		}
+
+		// Wait for temperature change
+		time.Sleep(30 * time.Second)
+
+		// Verify temperature
+		if !lc.verifyTemperature(temp) {
+			return fmt.Errorf("failed to maintain temperature at %d°F", targetTemp)
+		}
+	}
+
 	return nil
 }
 
 func (lc *LineCook) grillItem(ctx context.Context, step models.CookingStep) error {
-	// Implement grilling logic
+	// Record grilling start
+	lc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "grilling",
+		Content:   fmt.Sprintf("Grilling %s", step.Description),
+		Metadata: map[string]interface{}{
+			"item":     step.Description,
+			"duration": step.Duration,
+			"stage":    "grill",
+		},
+	})
+
+	// Preheat grill
+	if err := lc.preheatGrill(int(step.Temperature.Value)); err != nil {
+		return fmt.Errorf("failed to preheat grill: %w", err)
+	}
+
+	// Place item on grill
+	if err := lc.placeOnGrill(step.Description); err != nil {
+		return fmt.Errorf("failed to place item on grill: %w", err)
+	}
+
+	// Cook for specified duration
+	time.Sleep(step.Duration)
+
+	// Check doneness
+	if !lc.checkDoneness(step.Description, step.Notes) {
+		return fmt.Errorf("item %s not cooked to specification", step.Description)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) sauteItem(ctx context.Context, step models.CookingStep) error {
-	// Implement sautéing logic
+	// Record sautéing start
+	lc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "saute",
+		Content:   fmt.Sprintf("Sautéing %s", step.Description),
+		Metadata: map[string]interface{}{
+			"item":     step.Description,
+			"duration": step.Duration,
+			"stage":    "saute",
+		},
+	})
+
+	// Heat pan
+	if err := lc.heatPan(int(step.Temperature.Value)); err != nil {
+		return fmt.Errorf("failed to heat pan: %w", err)
+	}
+
+	// Add oil/fat
+	if err := lc.addCookingFat(step.Notes); err != nil {
+		return fmt.Errorf("failed to add cooking fat: %w", err)
+	}
+
+	// Add item
+	if err := lc.addToPan(step.Description); err != nil {
+		return fmt.Errorf("failed to add item to pan: %w", err)
+	}
+
+	// Cook for specified duration
+	time.Sleep(step.Duration)
+
+	// Check doneness
+	if !lc.checkDoneness(step.Description, step.Notes) {
+		return fmt.Errorf("item %s not cooked to specification", step.Description)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) fryItem(ctx context.Context, step models.CookingStep) error {
-	// Implement frying logic
+	// Record frying start
+	lc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "frying",
+		Content:   fmt.Sprintf("Frying %s", step.Description),
+		Metadata: map[string]interface{}{
+			"item":     step.Description,
+			"duration": step.Duration,
+			"stage":    "fry",
+		},
+	})
+
+	// Heat oil
+	if err := lc.heatOil(int(step.Temperature.Value)); err != nil {
+		return fmt.Errorf("failed to heat oil: %w", err)
+	}
+
+	// Add item to fryer
+	if err := lc.addToFryer(step.Description); err != nil {
+		return fmt.Errorf("failed to add item to fryer: %w", err)
+	}
+
+	// Cook for specified duration
+	time.Sleep(step.Duration)
+
+	// Check doneness
+	if !lc.checkDoneness(step.Description, step.Notes) {
+		return fmt.Errorf("item %s not cooked to specification", step.Description)
+	}
+
 	return nil
 }
 
 func (lc *LineCook) bakeItem(ctx context.Context, step models.CookingStep) error {
-	// Implement baking logic
+	// Record baking start
+	lc.AddMemory(ctx, Event{
+		Timestamp: time.Now(),
+		Type:      "baking",
+		Content:   fmt.Sprintf("Baking %s", step.Description),
+		Metadata: map[string]interface{}{
+			"item":     step.Description,
+			"duration": step.Duration,
+			"stage":    "bake",
+		},
+	})
+
+	// Preheat oven
+	if err := lc.preheatOven(int(step.Temperature.Value)); err != nil {
+		return fmt.Errorf("failed to preheat oven: %w", err)
+	}
+
+	// Place item in oven
+	if err := lc.placeInOven(step.Description); err != nil {
+		return fmt.Errorf("failed to place item in oven: %w", err)
+	}
+
+	// Cook for specified duration
+	time.Sleep(step.Duration)
+
+	// Check doneness
+	if !lc.checkDoneness(step.Description, step.Notes) {
+		return fmt.Errorf("item %s not cooked to specification", step.Description)
+	}
+
+	return nil
+}
+
+// Additional helper functions
+
+func (lc *LineCook) checkTemperature(equipment string) bool {
+	// Implement temperature check
+	return true
+}
+
+func (lc *LineCook) checkCleanliness(equipment string) bool {
+	// Implement cleanliness check
+	return true
+}
+
+func (lc *LineCook) checkMaintenance(equipment string) bool {
+	// Implement maintenance check
+	return true
+}
+
+func (lc *LineCook) removeLargeDebris(equipment string) error {
+	// Implement debris removal
+	return nil
+}
+
+func (lc *LineCook) initialRinse(equipment string) error {
+	// Implement initial rinse
+	return nil
+}
+
+func (lc *LineCook) applyCleaner(equipment string) error {
+	// Implement cleaner application
+	return nil
+}
+
+func (lc *LineCook) scrub(equipment string) error {
+	// Implement scrubbing
+	return nil
+}
+
+func (lc *LineCook) rinseWithWater(equipment string) error {
+	// Implement water rinse
+	return nil
+}
+
+func (lc *LineCook) hasSoapResidue(equipment string) bool {
+	// Implement soap residue check
+	return false
+}
+
+func (lc *LineCook) requiresAirDrying(equipment string) bool {
+	// Implement air drying requirement check
+	return true
+}
+
+func (lc *LineCook) airDry(equipment string) error {
+	// Implement air drying
+	return nil
+}
+
+func (lc *LineCook) towelDry(equipment string) error {
+	// Implement towel drying
+	return nil
+}
+
+func (lc *LineCook) clearSurface(surface string) error {
+	// Implement surface clearing
+	return nil
+}
+
+func (lc *LineCook) wipeDown(surface string) error {
+	// Implement surface wiping
+	return nil
+}
+
+func (lc *LineCook) spraySanitizer(surface string) error {
+	// Implement sanitizer spraying
+	return nil
+}
+
+func (lc *LineCook) spreadSanitizer(surface string) error {
+	// Implement sanitizer spreading
+	return nil
+}
+
+func (lc *LineCook) isSurfaceDry(surface string) bool {
+	// Implement surface dryness check
+	return true
+}
+
+func (lc *LineCook) getToolType(tool string) string {
+	// Implement tool type determination
+	return "utensil"
+}
+
+func (lc *LineCook) cleanKnife(tool string) error {
+	// Implement knife cleaning
+	return nil
+}
+
+func (lc *LineCook) cleanUtensil(tool string) error {
+	// Implement utensil cleaning
+	return nil
+}
+
+func (lc *LineCook) cleanContainer(tool string) error {
+	// Implement container cleaning
+	return nil
+}
+
+func (lc *LineCook) isValidStorage(tool, location string) bool {
+	// Implement storage validation
+	return true
+}
+
+func (lc *LineCook) placeTool(tool, location string) error {
+	// Implement tool placement
+	return nil
+}
+
+func (lc *LineCook) verifyTemperature(temp *models.TemperatureMonitor) bool {
+	// Implement temperature verification
+	return true
+}
+
+func (lc *LineCook) preheatGrill(temp int) error {
+	// Implement grill preheating
+	return nil
+}
+
+func (lc *LineCook) placeOnGrill(item string) error {
+	// Implement item placement on grill
+	return nil
+}
+
+func (lc *LineCook) checkDoneness(item string, criteria string) bool {
+	// Implement doneness check
+	return true
+}
+
+func (lc *LineCook) heatPan(temp int) error {
+	// Implement pan heating
+	return nil
+}
+
+func (lc *LineCook) addCookingFat(fat string) error {
+	// Implement cooking fat addition
+	return nil
+}
+
+func (lc *LineCook) addToPan(item string) error {
+	// Implement item addition to pan
+	return nil
+}
+
+func (lc *LineCook) heatOil(temp int) error {
+	// Implement oil heating
+	return nil
+}
+
+func (lc *LineCook) addToFryer(item string) error {
+	// Implement item addition to fryer
+	return nil
+}
+
+func (lc *LineCook) preheatOven(temp int) error {
+	// Implement oven preheating
+	return nil
+}
+
+func (lc *LineCook) placeInOven(item string) error {
+	// Implement item placement in oven
 	return nil
 }
