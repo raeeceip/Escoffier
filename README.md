@@ -8,81 +8,139 @@ MasterChef-Bench evaluates LLMs on their ability to perform complex real-world t
 
 ## Features
 
-- Multi-agent evaluation framework for kitchen management
-- Role-based testing with hierarchical relationships
-- Real-time visualization of agent interactions
-- Standardized benchmarking scenarios
-- Performance metrics and reporting
-- LLM Playground for interactive testing
+- **Multi-agent evaluation framework** for kitchen management scenarios
+- **Role-based testing** with hierarchical relationships (Executive Chef, Sous Chef, Line Cook, etc.)
+- **Real-time visualization** of agent interactions and kitchen state
+- **Standardized benchmarking scenarios** for consistent evaluation
+- **Performance metrics and reporting** with Prometheus integration
+- **LLM Playground** for interactive testing and comparison
+- **CLI interface** for programmatic interaction
+- **Web dashboard** for monitoring and visualization
 
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 
-- Go 1.17+
-- Node.js 14+ (for frontend)
-- Docker (optional, for containerized deployment)
-- API keys for LLMs (OpenAI, Anthropic, etc.)
+- **Go 1.22+** (for backend services)
+- **Node.js 18+** (for frontend)
+- **npm** (comes with Node.js)
+- **LLM API keys** (OpenAI, Anthropic, Google - optional for development)
 
-### Installation
-
-Clone the repository:
+### 🚀 One-Command Start
 
 ```bash
-git clone https://github.com/yourusername/masterchef-bench.git
+# Clone and start everything
+git clone <repository-url>
 cd masterchef-bench
+./start-all.sh
 ```
 
-Install Go dependencies:
+This will:
+1. Check dependencies
+2. Build all components
+3. Start the backend API server
+4. Start the LLM playground
+5. Start metrics collection
+6. Open the web interface
+
+### 🛠️ Development Mode
+
+For development with hot reloading:
 
 ```bash
+# Interactive development menu
+make dev
+# or
+./dev.sh
+```
+
+### 📋 Alternative Installation Methods
+
+#### Method 1: Using Make (Recommended)
+
+```bash
+# Install dependencies and build everything
+make install-deps
+make build
+
+# Start all services
+make start
+
+# Development mode
+make dev
+```
+
+#### Method 2: Manual Setup
+
+```bash
+# Install Go dependencies
 go mod download
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+
+# Build all components
+make build
+
+# Start backend
+go run cmd/main.go
+
+# In another terminal, start frontend dev server
+cd frontend && npm start
 ```
 
-Install frontend dependencies:
+### 🔧 Configuration
+
+#### Environment Variables
 
 ```bash
-cd frontend
-npm install
-cd ..
-```
-
-### Configuration
-
-Set up your environment variables:
-
-```bash
+# API Keys (optional for development)
 export OPENAI_API_KEY=your_openai_key
 export ANTHROPIC_API_KEY=your_anthropic_key
 export GOOGLE_API_KEY=your_google_key
+
+# Database (optional, defaults to SQLite)
+export DATABASE_URL=data/masterchef.db
+
+# Server Configuration (optional)
+export PORT=8080
+export PLAYGROUND_PORT=8090
+export METRICS_PORT=9090
 ```
 
-Or create a `.env` file in the root directory.
+#### Configuration File
 
-### Running the Backend
+Create `configs/config.yaml`:
 
-Start the main backend server:
-
-```bash
-go run cmd/main.go
+```yaml
+database_url: data/masterchef.db
+log_level: info
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
 ```
 
-### Running the Frontend
+### 🌐 Access Points
 
-In a separate terminal:
+Once running, access the system at:
 
-```bash
-cd frontend
-npm start
-```
+- **Main API**: http://localhost:8080
+- **LLM Playground**: http://localhost:8090
+- **Metrics Dashboard**: http://localhost:9090/metrics
+- **Health Check**: http://localhost:8080/health
 
-### Using the CLI
-
-For command-line interaction:
+### 🎯 Available Make Commands
 
 ```bash
-cd cli
-go run main.go
+make help              # Show all available commands
+make build             # Build all components
+make test              # Run all tests
+make dev               # Start development environment
+make start             # Start production mode
+make clean             # Clean build artifacts
+make lint              # Run linters
+make docker-build      # Build Docker image
 ```
 
 ## LLM Playground
