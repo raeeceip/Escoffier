@@ -108,6 +108,11 @@ func TestEvaluateAgent(t *testing.T) {
 					Content:   "Completed order #123",
 					Timestamp: time.Now(),
 				},
+				{
+					Type:      "task_assignment",
+					Content:   "Assigned prep task",
+					Timestamp: time.Now(),
+				},
 			},
 			TaskQueue: []evaluation.Task{
 				{
@@ -115,6 +120,12 @@ func TestEvaluateAgent(t *testing.T) {
 					Status:    "completed",
 					StartTime: time.Now().Add(-1 * time.Hour),
 					EndTime:   time.Now(),
+				},
+				{
+					ID:        "task2",
+					Status:    "completed",
+					StartTime: time.Now().Add(-2 * time.Hour),
+					EndTime:   time.Now().Add(-1 * time.Hour),
 				},
 			},
 		},

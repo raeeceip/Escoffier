@@ -4,6 +4,17 @@ import { io } from 'socket.io-client';
 
 const socket = io('http://localhost:8080');
 
+interface AgentPosition {
+  x: number;
+  y: number;
+  id: string;
+  name: string;
+}
+
+interface KitchenState {
+  agents: AgentPosition[];
+}
+
 const KitchenVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -14,7 +25,7 @@ const KitchenVisualization: React.FC = () => {
 
     svg.attr('width', width).attr('height', height);
 
-    socket.on('kitchenState', (data) => {
+    socket.on('kitchenState', (data: KitchenState) => {
       // Clear previous visualization
       svg.selectAll('*').remove();
 
@@ -24,8 +35,8 @@ const KitchenVisualization: React.FC = () => {
         .data(data.agents)
         .enter()
         .append('circle')
-        .attr('cx', (d) => d.x)
-        .attr('cy', (d) => d.y)
+        .attr('cx', (d: AgentPosition) => d.x)
+        .attr('cy', (d: AgentPosition) => d.y)
         .attr('r', 10)
         .attr('fill', 'blue');
     });

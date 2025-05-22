@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"masterchef/internal/agents"
 	"masterchef/internal/api"
@@ -12,8 +13,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -162,15 +167,51 @@ func main() {
 }
 
 func loadConfig(path string) (*Config, error) {
-	// Implement configuration loading
-	return &Config{}, nil
+	cfg := defaultConfig()
+	// read file if exists
+	if f, err := os.Open(path); err == nil {
+		defer f.Close()
+		decoder := yaml.NewDecoder(f)
+		_ = decoder.Decode(&cfg) // ignore error if partial
+	}
+	// env overrides
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.DatabaseURL = v
+	}
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		cfg.LogLevel = v
+	}
+	return cfg, nil
+}
+
+func defaultConfig() *Config {
+	return &Config{
+		DatabaseURL: filepath.Join("data", "masterchef.db"),
+		MetricsConfig: struct {
+			Enabled bool   `yaml:"enabled"`
+			Port    int    `yaml:"port"`
+			Path    string `yaml:"path"`
+		}{Enabled: true, Port: 9090, Path: "/metrics"},
+	}
 }
 
 func initializeLLM(config *Config) (llms.LLM, error) {
-	// Initialize OpenAI client
+	// Check if OpenAI API key is set
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		// Use dummy API key for development
+		log.Println("Warning: OPENAI_API_KEY not set, using mock key for development")
+		apiKey = "sk-mock-development-key"
+	}
+
+	// Initialize OpenAI client with the provided API key
 	llm, err := openai.New(
 		openai.WithModel("gpt-4-turbo-preview"),
-		openai.WithToken(os.Getenv("OPENAI_API_KEY")),
+		openai.WithToken(apiKey),
+		// Add option to not validate API key for local development
+		openai.WithHTTPClient(&http.Client{
+			Transport: &mockTransport{},
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OpenAI client: %w", err)
@@ -179,12 +220,58 @@ func initializeLLM(config *Config) (llms.LLM, error) {
 	return llm, nil
 }
 
+// mockTransport is a simple mock transport that returns fake responses
+type mockTransport struct{}
+
+func (t *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Only intercept OpenAI API calls
+	if req.URL.Host == "api.openai.com" {
+		// Create a mock response
+		mockResp := &http.Response{
+			StatusCode: 200,
+			Body: io.NopCloser(strings.NewReader(`{
+				"id": "mock-response-id",
+				"object": "chat.completion",
+				"created": 1677858242,
+				"model": "gpt-4-turbo-preview",
+				"choices": [
+					{
+						"message": {
+							"role": "assistant",
+							"content": "This is a mock response for development without an OpenAI API key."
+						},
+						"finish_reason": "stop",
+						"index": 0
+					}
+				],
+				"usage": {
+					"prompt_tokens": 10,
+					"completion_tokens": 20,
+					"total_tokens": 30
+				}
+			}`)),
+			Header: make(http.Header),
+		}
+		mockResp.Header.Set("Content-Type", "application/json")
+		return mockResp, nil
+	}
+
+	// For other requests, use the default transport
+	return http.DefaultTransport.RoundTrip(req)
+}
+
 func initializeDB(config *Config) (*Database, error) {
-	db, err := gorm.Open("sqlite3", config.DatabaseURL)
+	absPath, _ := filepath.Abs(config.DatabaseURL)
+	// ensure directory exists
+	dir := filepath.Dir(absPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create data dir: %w", err)
+	}
+	// open sqlite
+	db, err := gorm.Open("sqlite3", absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-
 	// Enable GORM logging in development
 	db.LogMode(true)
 

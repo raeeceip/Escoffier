@@ -45,6 +45,11 @@ func NewKitchenAPI(model llms.LLM, db Database) *KitchenAPI {
 
 // setupRoutes configures all API endpoints
 func (k *KitchenAPI) setupRoutes() {
+	// Health check
+	k.Router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "MasterChef-Bench API is running"})
+	})
+
 	v1 := k.Router.Group("/api/v1")
 	{
 		// Order management

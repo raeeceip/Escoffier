@@ -259,8 +259,18 @@ func evaluateLongTermConsistency(ctx context.Context, agent *Agent) (float64, er
 // Helper calculation functions
 
 func calculateKnowledgeConsistency(events []Event) float64 {
-	// Implement knowledge consistency calculation
-	return 0.0
+	if len(events) == 0 {
+		return 0.0
+	}
+	
+	// Simple heuristic: more varied event types indicate good knowledge utilization
+	eventTypes := make(map[string]bool)
+	for _, event := range events {
+		eventTypes[event.Type] = true
+	}
+	
+	// Return a score based on event type diversity
+	return math.Min(float64(len(eventTypes))/10.0, 1.0) // Cap at 1.0
 }
 
 func calculateAuthorityAdherence(tasks []Task) float64 {
@@ -274,8 +284,18 @@ func calculateTaskAppropriateness(tasks []Task) float64 {
 }
 
 func calculateCompletionRate(tasks []Task) float64 {
-	// Implement completion rate calculation
-	return 0.0
+	if len(tasks) == 0 {
+		return 0.0
+	}
+	
+	completedCount := 0
+	for _, task := range tasks {
+		if task.Status == "completed" {
+			completedCount++
+		}
+	}
+	
+	return float64(completedCount) / float64(len(tasks))
 }
 
 func calculateTimeEfficiency(tasks []Task) float64 {
@@ -289,8 +309,19 @@ func calculateQualityScore(tasks []Task) float64 {
 }
 
 func calculateCommunicationEfficiency(events []Event) float64 {
-	// Implement communication efficiency calculation
-	return 0.0
+	if len(events) == 0 {
+		return 0.0
+	}
+	
+	communicationCount := 0
+	for _, event := range events {
+		if event.Type == "communication" || event.Type == "task_assignment" {
+			communicationCount++
+		}
+	}
+	
+	// Simple heuristic: more communication events indicate better coordination
+	return math.Min(float64(communicationCount)/float64(len(events)), 1.0)
 }
 
 func calculateResourceUtilization(events []Event) float64 {
@@ -438,14 +469,18 @@ func calculateConflictResolution(events []Event) float64 {
 }
 
 func calculateDecisionConsistency(store *VectorStore) float64 {
+	if store == nil {
+		return 0.5 // Default neutral score
+	}
+	
 	var totalConsistency float64
 	var decisionCount int
 
 	// Group similar decisions
-	decisionGroups := make(map[string][]interface{})
+	decisionGroups := make(map[string][]any)
 	for _, metadata := range store.metadata {
-		if decision, ok := metadata.(map[string]interface{})["decision"]; ok {
-			if category, ok := metadata.(map[string]interface{})["category"].(string); ok {
+		if decision, ok := metadata.(map[string]any)["decision"]; ok {
+			if category, ok := metadata.(map[string]any)["category"].(string); ok {
 				decisionGroups[category] = append(decisionGroups[category], decision)
 			}
 		}
@@ -481,6 +516,10 @@ func calculateDecisionConsistency(store *VectorStore) float64 {
 }
 
 func calculateLearningProgression(store *VectorStore) float64 {
+	if store == nil {
+		return 0.5 // Default neutral score
+	}
+	
 	var totalProgression float64
 	var agentCount int
 
@@ -492,7 +531,7 @@ func calculateLearningProgression(store *VectorStore) float64 {
 
 	// Group performance data by agent
 	for _, metadata := range store.metadata {
-		if data, ok := metadata.(map[string]interface{}); ok {
+		if data, ok := metadata.(map[string]any); ok {
 			if agentID, ok := data["agent_id"].(string); ok {
 				if timestamp, ok := data["timestamp"].(time.Time); ok {
 					if score, ok := data["performance_score"].(float64); ok {
@@ -545,6 +584,10 @@ func calculateLearningProgression(store *VectorStore) float64 {
 }
 
 func calculateAdaptationCapability(store *VectorStore) float64 {
+	if store == nil {
+		return 0.5 // Default neutral score
+	}
+	
 	var totalAdaptation float64
 	var scenarioCount int
 
@@ -558,7 +601,7 @@ func calculateAdaptationCapability(store *VectorStore) float64 {
 
 	// Analyze adaptation events
 	for _, metadata := range store.metadata {
-		if data, ok := metadata.(map[string]interface{}); ok {
+		if data, ok := metadata.(map[string]any); ok {
 			if scenarioID, ok := data["scenario_id"].(string); ok {
 				scenario := adaptationScores[scenarioID]
 

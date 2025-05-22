@@ -45,7 +45,7 @@ func TestNewExecutiveChef(t *testing.T) {
 
 	// Assert basic properties
 	assert.NotNil(t, chef)
-	assert.Equal(t, "executive_chef", chef.GetRole())
+	assert.Equal(t, agents.RoleExecutiveChef, chef.GetRole())
 	assert.NotNil(t, chef.MenuPlanner)
 	assert.NotNil(t, chef.KitchenStatus)
 	assert.NotNil(t, chef.Staff)
@@ -80,6 +80,9 @@ func TestAssignOrder(t *testing.T) {
 
 	// Create executive chef
 	chef := agents.NewExecutiveChef(context.Background(), mockLLM)
+
+	// Add some mock staff to the chef
+	chef.Staff["1"] = &agents.BaseAgent{}
 
 	// Create test order
 	order := models.Order{

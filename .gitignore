@@ -1,25 +1,84 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# MasterChef-Bench .gitignore
+
+# Build artifacts - binaries
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+backend/backend
+cli/cli
+cmd/masterchef
+masterchef
 
-# Test binary, built with `go test -c`
+# Test binaries and coverage
 *.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+coverage.txt
+*.prof
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Database files (keep schema, ignore data)
+*.db
+*.sqlite
+*.sqlite3
+data/
+!data/.gitkeep
 
-# Go workspace file
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# Environment and secrets
+.env
+.env.local
+.env.production
+*.pem
+*.key
+!*.key.example
+
+# Go specific
 go.work
 go.work.sum
+vendor/
 
-# env file
-.env
+# Frontend build artifacts
+frontend/build/
+frontend/dist/
+frontend/node_modules/
+frontend/.cache/
+frontend/coverage/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.docker/
+*.dockerfile.tmp
+
+# Deployment artifacts (keep configs, ignore generated)
+kamal.env
+.kamal/
+docker-compose.override.yml
+
+# Keep essential deployment files
+!Dockerfile
+!docker-compose.yml
+!kamal.yml
+!configs/

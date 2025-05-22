@@ -24,6 +24,11 @@ global.fetch = jest.fn().mockImplementation((url) => {
 
 // Mock WebSocket
 class MockWebSocket {
+  onopen: (() => void) | null = null;
+  onmessage: ((event: any) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: ((error: any) => void) | null = null;
+  
   constructor() {
     setTimeout(() => {
       if (this.onopen) this.onopen();

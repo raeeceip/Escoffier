@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -110,17 +111,32 @@ func loadRecipe(recipeName string) (*models.Recipe, error) {
 		return nil, err
 	}
 
-	// Load recipe steps
-	if err := db.Model(&recipe).Association("Steps").Error; err != nil {
-		return nil, err
-	}
-	db.Model(&recipe).Association("Steps").Find(&recipe.Steps)
+	// Load related data (steps and ingredients would be in JSON fields)
+	var steps []models.CookingStep
+	var ingredients []models.IngredientRequirement
 
-	// Load recipe ingredients
-	if err := db.Model(&recipe).Association("Ingredients").Error; err != nil {
-		return nil, err
+	// Deserialize steps and ingredients if available
+	if recipe.StepsJSON != "" {
+		if err := json.Unmarshal([]byte(recipe.StepsJSON), &steps); err != nil {
+			return nil, fmt.Errorf("failed to deserialize recipe steps: %w", err)
+		}
 	}
-	db.Model(&recipe).Association("Ingredients").Find(&recipe.Ingredients)
+
+	if recipe.IngredientsJSON != "" {
+		if err := json.Unmarshal([]byte(recipe.IngredientsJSON), &ingredients); err != nil {
+			return nil, fmt.Errorf("failed to deserialize recipe ingredients: %w", err)
+		}
+	}
+
+	// Set the steps and ingredients (even though we already have them in JSON form)
+	// This maintains compatibility with the existing code
+	if err := recipe.SetSteps(steps); err != nil {
+		return nil, fmt.Errorf("failed to set recipe steps: %w", err)
+	}
+
+	if err := recipe.SetIngredients(ingredients); err != nil {
+		return nil, fmt.Errorf("failed to set recipe ingredients: %w", err)
+	}
 
 	return &recipe, nil
 }
@@ -129,8 +145,14 @@ func loadRecipe(recipeName string) (*models.Recipe, error) {
 func checkIngredients(recipe *models.Recipe) error {
 	db := database.GetDB()
 
+	// Get the ingredients
+	ingredients, err := recipe.GetIngredients()
+	if err != nil {
+		return fmt.Errorf("failed to parse recipe ingredients: %w", err)
+	}
+
 	// Check each ingredient
-	for _, ingredient := range recipe.Ingredients {
+	for _, ingredient := range ingredients {
 		var inventoryItem models.InventoryItem
 
 		if err := db.Where("name = ?", ingredient.Name).First(&inventoryItem).Error; err != nil {
@@ -150,9 +172,15 @@ func checkIngredients(recipe *models.Recipe) error {
 func reserveEquipment(recipe *models.Recipe) error {
 	db := database.GetDB()
 
+	// Get the steps
+	steps, err := recipe.GetSteps()
+	if err != nil {
+		return fmt.Errorf("failed to parse recipe steps: %w", err)
+	}
+
 	// Get required equipment
 	var requiredEquipment []string
-	for _, step := range recipe.Steps {
+	for _, step := range steps {
 		requiredEquipment = append(requiredEquipment, step.RequiredEquipment...)
 	}
 
@@ -187,13 +215,19 @@ func reserveEquipment(recipe *models.Recipe) error {
 
 // executeRecipeSteps processes each step in the recipe
 func executeRecipeSteps(recipe *models.Recipe) error {
+	// Get the steps
+	steps, err := recipe.GetSteps()
+	if err != nil {
+		return fmt.Errorf("failed to parse recipe steps: %w", err)
+	}
+
 	// Sort steps by sequence number
-	sort.Slice(recipe.Steps, func(i, j int) bool {
-		return recipe.Steps[i].Sequence < recipe.Steps[j].Sequence
+	sort.Slice(steps, func(i, j int) bool {
+		return steps[i].Sequence < steps[j].Sequence
 	})
 
 	// Execute each step
-	for _, step := range recipe.Steps {
+	for _, step := range steps {
 		// Simulate step execution time
 		duration := step.Duration
 		if duration == 0 {
@@ -218,9 +252,16 @@ func executeRecipeSteps(recipe *models.Recipe) error {
 func releaseEquipment(recipe *models.Recipe) {
 	db := database.GetDB()
 
+	// Get the steps
+	steps, err := recipe.GetSteps()
+	if err != nil {
+		log.Printf("Failed to parse recipe steps: %v", err)
+		return
+	}
+
 	// Get required equipment
 	var requiredEquipment []string
-	for _, step := range recipe.Steps {
+	for _, step := range steps {
 		requiredEquipment = append(requiredEquipment, step.RequiredEquipment...)
 	}
 
@@ -251,8 +292,14 @@ func releaseEquipment(recipe *models.Recipe) {
 func updateInventory(recipe *models.Recipe) error {
 	db := database.GetDB()
 
+	// Get the ingredients
+	ingredients, err := recipe.GetIngredients()
+	if err != nil {
+		return fmt.Errorf("failed to parse recipe ingredients: %w", err)
+	}
+
 	// Update each ingredient
-	for _, ingredient := range recipe.Ingredients {
+	for _, ingredient := range ingredients {
 		var inventoryItem models.InventoryItem
 
 		if err := db.Where("name = ?", ingredient.Name).First(&inventoryItem).Error; err != nil {
@@ -276,15 +323,13 @@ func recordRecipeExecution(recipe *models.Recipe) {
 	db := database.GetDB()
 
 	// Find the numeric ID for the recipe in the database
-	var dbRecipe struct {
-		ID uint
-	}
+	var dbRecipe models.Recipe
 
-	// First try to find by string ID
-	err := db.Table("recipes").Select("id").Where("id = ?", recipe.ID).First(&dbRecipe).Error
+	// First try to find by recipe ID
+	err := db.Where("id = ?", recipe.RecipeID).First(&dbRecipe).Error
 	if err != nil {
 		// If not found by ID, try by name
-		err = db.Table("recipes").Select("id").Where("name = ?", recipe.Name).First(&dbRecipe).Error
+		err = db.Where("name = ?", recipe.Name).First(&dbRecipe).Error
 		if err != nil {
 			log.Printf("Failed to find recipe in database by ID or name: %v", err)
 			return
@@ -293,7 +338,7 @@ func recordRecipeExecution(recipe *models.Recipe) {
 
 	// Create execution record
 	execution := models.RecipeExecution{
-		RecipeID:   dbRecipe.ID,                                          // Use the numeric ID from the database
+		RecipeID:   dbRecipe.ID,                                          // Use the gorm.Model ID
 		StartTime:  time.Now().Add(-time.Duration(recipe.EstimatedTime)), // Simulate start time
 		EndTime:    time.Now(),
 		Status:     string(models.ExecutionStatusCompleted),
@@ -305,7 +350,7 @@ func recordRecipeExecution(recipe *models.Recipe) {
 	if err := db.Create(&execution).Error; err != nil {
 		log.Printf("Failed to record recipe execution: %v", err)
 	} else {
-		log.Printf("Successfully recorded execution of recipe %s (ID: %s)", recipe.Name, recipe.ID)
+		log.Printf("Successfully recorded execution of recipe %s (ID: %s)", recipe.Name, recipe.RecipeID)
 	}
 }
 

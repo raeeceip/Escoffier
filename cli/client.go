@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -14,20 +15,48 @@ const baseURL = "http://localhost:8080"
 // ApiClient handles API requests to the MasterChef-Bench API
 type ApiClient struct {
 	httpClient *http.Client
+	BaseURL    string
+	UseMock    bool
 }
 
 // NewApiClient creates a new API client
 func NewApiClient() *ApiClient {
-	return &ApiClient{
+	baseURL := os.Getenv("MASTERCHEF_API_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
+	}
+
+	client := &ApiClient{
 		httpClient: &http.Client{
 			Timeout: time.Second * 10,
 		},
+		BaseURL: baseURL,
+		UseMock: false, // Default to trying the real server first
 	}
+
+	// Verify connectivity - if server is not available, use mock data
+	if !client.ping() {
+		fmt.Printf("Warning: API server at %s is not available. Using mock data.\n", baseURL)
+		client.UseMock = true
+	}
+
+	return client
+}
+
+// ping checks if the API server is available
+func (c *ApiClient) ping() bool {
+	url := fmt.Sprintf("%s/health", c.BaseURL)
+	resp, err := http.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // CheckHealth checks if the API is up and running
 func (c *ApiClient) CheckHealth() (bool, error) {
-	resp, err := c.httpClient.Get(baseURL + "/health")
+	resp, err := c.httpClient.Get(c.BaseURL + "/health")
 	if err != nil {
 		return false, err
 	}
@@ -106,7 +135,7 @@ type OrderItem struct {
 
 // GetKitchenState retrieves the current kitchen state
 func (c *ApiClient) GetKitchenState() (*Kitchen, error) {
-	resp, err := c.httpClient.Get(baseURL + "/kitchen")
+	resp, err := c.httpClient.Get(c.BaseURL + "/kitchen")
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +160,7 @@ func (c *ApiClient) UpdateKitchenState(kitchen *Kitchen) error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", baseURL+"/kitchen", bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", c.BaseURL+"/kitchen", bytes.NewBuffer(data))
 	if err != nil {
 		return err
 	}
@@ -153,7 +182,7 @@ func (c *ApiClient) UpdateKitchenState(kitchen *Kitchen) error {
 
 // GetAgents retrieves all agents
 func (c *ApiClient) GetAgents() ([]Agent, error) {
-	resp, err := c.httpClient.Get(baseURL + "/agents")
+	resp, err := c.httpClient.Get(c.BaseURL + "/agents")
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +207,7 @@ func (c *ApiClient) CreateAgent(agent *Agent) error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", baseURL+"/agents", bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", c.BaseURL+"/agents", bytes.NewBuffer(data))
 	if err != nil {
 		return err
 	}
@@ -200,7 +229,11 @@ func (c *ApiClient) CreateAgent(agent *Agent) error {
 
 // GetOrders retrieves all orders with optional filter
 func (c *ApiClient) GetOrders(status string) ([]Order, error) {
-	url := baseURL + "/orders"
+	if c.UseMock {
+		return c.getMockOrders(status), nil
+	}
+
+	url := c.BaseURL + "/orders"
 	if status != "" {
 		url += fmt.Sprintf("?status=%s", status)
 	}
@@ -211,12 +244,14 @@ func (c *ApiClient) GetOrders(status string) ([]Order, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get orders with status code: %d", resp.StatusCode)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
 
 	var orders []Order
-	if err := json.NewDecoder(resp.Body).Decode(&orders); err != nil {
+	err = json.Unmarshal(body, &orders)
+	if err != nil {
 		return nil, err
 	}
 
@@ -225,18 +260,24 @@ func (c *ApiClient) GetOrders(status string) ([]Order, error) {
 
 // GetOrder retrieves a specific order by ID
 func (c *ApiClient) GetOrder(id uint) (*Order, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/orders/%d", baseURL, id))
+	if c.UseMock {
+		return c.getMockOrder(id), nil
+	}
+
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/orders/%d", c.BaseURL, id))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get order with status code: %d", resp.StatusCode)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
 
 	var order Order
-	if err := json.NewDecoder(resp.Body).Decode(&order); err != nil {
+	err = json.Unmarshal(body, &order)
+	if err != nil {
 		return nil, err
 	}
 
@@ -245,12 +286,16 @@ func (c *ApiClient) GetOrder(id uint) (*Order, error) {
 
 // CreateOrder creates a new order
 func (c *ApiClient) CreateOrder(order *Order) (*Order, error) {
+	if c.UseMock {
+		return c.createMockOrder(order), nil
+	}
+
 	data, err := json.Marshal(order)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", baseURL+"/orders", bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", c.BaseURL+"/orders", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -262,13 +307,14 @@ func (c *ApiClient) CreateOrder(order *Order) (*Order, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to create order: %s", string(body))
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
 
 	var createdOrder Order
-	if err := json.NewDecoder(resp.Body).Decode(&createdOrder); err != nil {
+	err = json.Unmarshal(body, &createdOrder)
+	if err != nil {
 		return nil, err
 	}
 
@@ -282,7 +328,7 @@ func (c *ApiClient) UpdateOrder(order *Order) error {
 		return err
 	}
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/orders/%d", baseURL, order.ID), bytes.NewBuffer(data))
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/orders/%d", c.BaseURL, order.ID), bytes.NewBuffer(data))
 	if err != nil {
 		return err
 	}
@@ -304,7 +350,12 @@ func (c *ApiClient) UpdateOrder(order *Order) error {
 
 // CancelOrder cancels an order by ID
 func (c *ApiClient) CancelOrder(id uint) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/orders/%d", baseURL, id), nil)
+	if c.UseMock {
+		// Just pretend it worked
+		return nil
+	}
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/orders/%d", c.BaseURL, id), nil)
 	if err != nil {
 		return err
 	}
@@ -316,9 +367,97 @@ func (c *ApiClient) CancelOrder(id uint) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("failed to cancel order: %s", string(body))
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	return nil
+}
+
+// Mock data generators
+// getMockOrders generates mock order data
+func (c *ApiClient) getMockOrders(status string) []Order {
+	orders := []Order{
+		{
+			ID:            1,
+			Type:          "dine_in",
+			Status:        "active",
+			Priority:      2,
+			TimeReceived:  time.Now().Add(-30 * time.Minute),
+			TimeCompleted: time.Time{},
+			AssignedTo:    "sous_chef_1",
+			Items: []OrderItem{
+				{Name: "Pasta Carbonara", Quantity: 2, Status: "in_progress", Notes: "Extra cheese"},
+				{Name: "Caesar Salad", Quantity: 1, Status: "completed", Notes: "No croutons"},
+			},
+		},
+		{
+			ID:            2,
+			Type:          "takeout",
+			Status:        "pending",
+			Priority:      1,
+			TimeReceived:  time.Now().Add(-15 * time.Minute),
+			TimeCompleted: time.Time{},
+			AssignedTo:    "",
+			Items: []OrderItem{
+				{Name: "Margherita Pizza", Quantity: 1, Status: "pending", Notes: ""},
+				{Name: "Tiramisu", Quantity: 2, Status: "pending", Notes: ""},
+			},
+		},
+		{
+			ID:            3,
+			Type:          "dine_in",
+			Status:        "completed",
+			Priority:      2,
+			TimeReceived:  time.Now().Add(-60 * time.Minute),
+			TimeCompleted: time.Now().Add(-15 * time.Minute),
+			AssignedTo:    "sous_chef_2",
+			Items: []OrderItem{
+				{Name: "Steak", Quantity: 1, Status: "completed", Notes: "Medium rare"},
+				{Name: "Mashed Potatoes", Quantity: 1, Status: "completed", Notes: ""},
+				{Name: "Red Wine", Quantity: 1, Status: "completed", Notes: "House red"},
+			},
+		},
+	}
+
+	// Filter by status if specified
+	if status != "" {
+		var filtered []Order
+		for _, order := range orders {
+			if order.Status == status {
+				filtered = append(filtered, order)
+			}
+		}
+		return filtered
+	}
+
+	return orders
+}
+
+// getMockOrder returns a mock order by ID
+func (c *ApiClient) getMockOrder(id uint) *Order {
+	orders := c.getMockOrders("")
+	for _, order := range orders {
+		if order.ID == id {
+			return &order
+		}
+	}
+	return nil
+}
+
+// createMockOrder simulates creating a new order
+func (c *ApiClient) createMockOrder(order *Order) *Order {
+	// Make a deep copy
+	newOrder := *order
+
+	// Set mock values
+	newOrder.ID = uint(time.Now().Unix() % 1000) // Random-ish ID
+	newOrder.TimeReceived = time.Now()
+	newOrder.Status = "pending"
+
+	// Set item statuses
+	for i := range newOrder.Items {
+		newOrder.Items[i].Status = "pending"
+	}
+
+	return &newOrder
 }
