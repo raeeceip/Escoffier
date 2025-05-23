@@ -14,10 +14,11 @@ import (
 type ProviderType string
 
 const (
-	OpenAIProvider    ProviderType = "openai"
-	AnthropicProvider ProviderType = "anthropic"
-	CohereProvider    ProviderType = "cohere"
-	OllamaProvider    ProviderType = "ollama"
+	OpenAIProvider       ProviderType = "openai"
+	AnthropicProvider    ProviderType = "anthropic"
+	CohereProvider       ProviderType = "cohere"
+	OllamaProvider       ProviderType = "ollama"
+	GitHubModelsProvider ProviderType = "github_models"
 )
 
 // ModelCredentials holds API keys and other auth details

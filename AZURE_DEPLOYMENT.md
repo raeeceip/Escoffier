@@ -1,6 +1,6 @@
-# Azure Deployment Guide for Escoffier (formerly MasterChef)
+# Azure Deployment Guide for Escoffier
 
-This guide covers the complete process of deploying the Escoffier restaurant simulation framework to Azure.
+This comprehensive guide covers deploying the Escoffier restaurant simulation framework to Azure, with both standard and cost-optimized options.
 
 ## Prerequisites
 
@@ -9,66 +9,77 @@ This guide covers the complete process of deploying the Escoffier restaurant sim
 - GitHub repository with Actions enabled
 - Docker installed locally for testing
 
+## Deployment Options
+
+### Option 1: Cost-Optimized Deployment (~$150-250/month)
+Best for development, testing, and small-scale production workloads.
+
+### Option 2: Standard Deployment (~$500-800/month)
+Best for production workloads requiring high availability and performance.
+
 ## Architecture Overview
 
-The Escoffier framework will be deployed on Azure using:
+### Cost-Optimized Architecture
+- **Frontend**: Azure Storage Static Website + CDN (~$10/month)
+- **Backend API**: Azure App Service B1 tier with auto-scaling (~$55/month)
+- **Database**: PostgreSQL Flexible Server Burstable tier (~$25/month)
+- **Cache**: Redis Basic C0 tier (~$17/month)
+- **AI**: Azure OpenAI (pay-per-use)
+- **Monitoring**: Application Insights + Azure Monitor (~$30/month)
 
-- **Azure Container Registry (ACR)** for Docker images
-- **Azure App Service** for the main application
-- **Azure Database for PostgreSQL** for data persistence
-- **Azure Cache for Redis** for caching and real-time features
-- **Azure AI Services** for LLM capabilities
-- **Azure Key Vault** for secrets management
-- **Application Insights** for monitoring
+### Standard Architecture
+- **Frontend**: Azure App Service with CDN
+- **Backend API**: Azure App Service P1v3 tier
+- **Database**: PostgreSQL General Purpose with HA
+- **Cache**: Redis Standard/Premium tier
+- **AI**: Azure OpenAI with dedicated capacity
+- **Monitoring**: Full Application Insights with retention
 
-## Step 1: Run the Refactoring Script
+## Deployment Steps
 
-First, rename the project from escoffierto Escoffier:
+### Step 1: Prepare the Codebase
+
+The refactoring from MasterChef to Escoffier has already been completed. Verify by checking:
 
 ```bash
-chmod +x refactor-to-escoffier.sh
-./refactor-to-escoffier.sh
+# Check Go module name
+grep "module" go.mod
+# Should show: module escoffier
+
+# Check database references
+grep -r "escoffier.db" --include="*.go" .
 ```
 
-This script will:
+### Step 2: Choose Deployment Type
 
-- Update all Go module references
-- Rename Docker services
-- Update configuration files
-- Refactor all code references
-- Update documentation
+Navigate to the infrastructure directory:
 
-## Step 2: Deploy Azure Infrastructure
+```bash
+cd azure-infrastructure
+```
 
-1. Navigate to the infrastructure directory:
+#### For Cost-Optimized Deployment:
+```bash
+chmod +x deploy-cost-optimized.sh
+./deploy-cost-optimized.sh
+```
 
-   ```bash
-   cd azure-infrastructure
-   ```
+#### For Standard Deployment:
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
 
-2. Run the deployment script:
+### Step 3: Configure Azure AI Services
 
-   ```bash
-   chmod +x deploy.sh
-   ./deploy.sh
-   ```
+1. Go to Azure Portal → Your AI Services instance
+2. Deploy the following models:
+   - `gpt-4` or `gpt-4-turbo` with deployment name: `escoffier-gpt4`
+   - `gpt-3.5-turbo` with deployment name: `escoffier-gpt35` (for cost-effective operations)
 
-3. Save the output values for later configuration.
+### Step 4: Set Up GitHub Secrets
 
-## Step 3: Configure Azure AI Services
-
-1. Go to the Azure Portal
-2. Navigate to your Azure AI Services instance
-3. Deploy the following models:
-
-   - `gpt-4` or `gpt-4-turbo`
-   - `gpt-3.5-turbo` (for cost-effective operations)
-
-4. Note the deployment names for configuration.
-
-## Step 4: Set Up GitHub Secrets
-
-Add the following secrets to your GitHub repository:
+Add these secrets to your GitHub repository:
 
 ```bash
 # Azure Container Registry
@@ -87,10 +98,10 @@ REDIS_PASSWORD=<redis-access-key>
 
 # Azure OpenAI
 AZURE_OPENAI_API_KEY=<your-api-key>
+AZURE_OPENAI_ENDPOINT=https://<your-instance>.openai.azure.com/
 ```
 
 To create Azure credentials:
-
 ```bash
 az ad sp create-for-rbac --name "escoffier-github-actions" \
   --role contributor \
@@ -98,57 +109,32 @@ az ad sp create-for-rbac --name "escoffier-github-actions" \
   --sdk-auth
 ```
 
-## Step 5: Update Application Configuration
+### Step 5: Initialize Database
 
-1. Update the `configs/config.yaml` with Azure-specific settings:
+```bash
+# Get the PostgreSQL connection string from deployment output
+POSTGRES_SERVER=$(cat deployment-config.json | jq -r '.postgresServer')
 
-   ```yaml
-   azure:
-     openai:
-       endpoint: ${AZURE_OPENAI_ENDPOINT}
-       deployment: gpt-4
-       apiVersion: 2024-02-01
-   ```
+# Initialize the database
+psql -h ${POSTGRES_SERVER}.postgres.database.azure.com \
+     -U escoffieradmin@${POSTGRES_SERVER} \
+     -d escoffier \
+     -f ../init.sql
+```
 
-2. Ensure all environment variables are properly set in the App Service configuration.
+### Step 6: Deploy the Application
 
-## Step 6: Deploy the Application
+Push your changes to trigger the GitHub Actions workflow:
 
-1. Push your changes to trigger the GitHub Actions workflow:
-
-   ```bash
-   git add .
-   git commit -m "Refactor to Escoffier and configure Azure deployment"
-   git push origin main
-   ```
-
-2. Monitor the deployment in the GitHub Actions tab.
-
-## Step 7: Post-Deployment Configuration
-
-1. **Database Initialization**:
-
-   ```bash
-   # Connect to Azure PostgreSQL and run init.sql
-   psql -h <postgres-server>.postgres.database.azure.com \
-        -U escoffieradmin@<postgres-server> \
-        -d escoffier \
-        -f init.sql
-   ```
-
-2. **Configure Firewall Rules**:
-
-   - Allow App Service outbound IPs in PostgreSQL firewall
-   - Configure Redis firewall rules
-
-3. **Set Up Monitoring**:
-   - Configure Application Insights alerts
-   - Set up log streaming
-   - Configure auto-scaling rules
+```bash
+git add .
+git commit -m "Deploy Escoffier to Azure"
+git push origin main
+```
 
 ## Environment Variables
 
-Key environment variables for Azure deployment:
+Configure these in your App Service:
 
 ```bash
 # Database
@@ -160,67 +146,139 @@ REDIS_URL=rediss://:${REDIS_PASSWORD}@${AZURE_REDIS_HOST}:6380/0
 # Azure OpenAI
 AZURE_OPENAI_ENDPOINT=https://<your-instance>.openai.azure.com/
 AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+AZURE_OPENAI_DEPLOYMENT_NAME=escoffier-gpt4
 
 # Application Insights
 APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING}
 ```
 
-## Scaling Considerations
+## Cost Management Strategies
 
-1. **App Service Plan**: Start with P1v3 for production workloads
-2. **Database**: Use General Purpose tier with at least 2 vCores
-3. **Redis**: Standard C1 for basic caching, Premium for persistence
-4. **Auto-scaling**: Configure based on CPU and memory metrics
+### 1. Use Reserved Instances
+- Save up to 40% on App Service and Database
+- 1-year or 3-year commitments
 
-## Cost Management
+### 2. Implement Auto-scaling
+- Scale down during off-hours
+- Use CPU and memory metrics
+- Configure minimum instances
 
-1. Use Azure Cost Management to set budgets
-2. Consider using spot instances for non-critical workloads
-3. Implement proper caching to reduce database calls
-4. Use Application Insights sampling for high-volume scenarios
+### 3. Optimize AI Usage
+- Use GPT-3.5 for non-critical tasks
+- Implement response caching
+- Monitor token usage
 
-## Security Best Practices
-
-1. Enable Azure AD authentication where possible
-2. Use managed identities for service-to-service auth
-3. Regularly rotate secrets in Key Vault
-4. Enable Azure Defender for all services
-5. Implement network security groups and private endpoints
-
-## Troubleshooting
-
-Common issues and solutions:
-
-1. **Container fails to start**: Check App Service logs and container diagnostics
-2. **Database connection errors**: Verify firewall rules and SSL settings
-3. **Redis timeouts**: Check network configuration and connection limits
-4. **AI Service errors**: Verify API keys and deployment names
+### 4. Database Optimization
+- Use connection pooling
+- Implement query caching
+- Regular index maintenance
 
 ## Monitoring and Alerts
 
-Set up the following alerts:
+### Key Metrics
+1. **Performance**:
+   - API response time (target: <200ms p95)
+   - Order processing time (target: <5s)
+   - Database query time (target: <50ms)
 
-- High CPU usage (>80%)
-- Memory pressure
-- Database connection pool exhaustion
-- Redis cache hit ratio < 80%
-- HTTP 5xx errors
-- Response time > 2s
+2. **Availability**:
+   - Uptime (target: 99.9%)
+   - Failed requests (target: <0.1%)
+   - Health check status
+
+3. **Cost**:
+   - Daily spend tracking
+   - Resource utilization
+   - AI token usage
+
+### Setting Up Alerts
+```bash
+# High CPU usage
+az monitor metrics alert create \
+  --name high-cpu \
+  --resource-group rg-escoffier-prod \
+  --scopes /subscriptions/.../providers/Microsoft.Web/sites/escoffier-app \
+  --condition "avg Percentage CPU > 80" \
+  --window-size 5m
+
+# Database connection failures
+az monitor metrics alert create \
+  --name db-connection-failures \
+  --resource-group rg-escoffier-prod \
+  --scopes /subscriptions/.../providers/Microsoft.DBforPostgreSQL/flexibleServers/... \
+  --condition "count failed_connections > 10" \
+  --window-size 5m
+```
+
+## Troubleshooting
+
+### Application Logs
+```bash
+# Stream live logs
+az webapp log tail --name escoffier-app --resource-group rg-escoffier-prod
+
+# Download logs
+az webapp log download --name escoffier-app --resource-group rg-escoffier-prod
+```
+
+### Database Issues
+```bash
+# Check connection
+psql -h ${POSTGRES_SERVER}.postgres.database.azure.com \
+     -U escoffieradmin@${POSTGRES_SERVER} \
+     -d escoffier \
+     -c "SELECT 1"
+
+# View active connections
+az postgres flexible-server show-connection-string \
+  --server-name ${POSTGRES_SERVER} \
+  --resource-group rg-escoffier-prod
+```
+
+### Common Issues
+1. **Container fails to start**: Check image registry permissions and environment variables
+2. **Database timeouts**: Verify firewall rules and connection pooling settings
+3. **Redis connection errors**: Check SSL settings and access keys
+4. **AI Service errors**: Verify API keys and rate limits
+
+## Security Best Practices
+
+1. **Enable Managed Identities** for service-to-service authentication
+2. **Use Key Vault** for all secrets
+3. **Configure Network Security Groups** to restrict access
+4. **Enable Azure Defender** for threat protection
+5. **Implement Private Endpoints** for database and Redis
+6. **Regular Security Audits** using Azure Security Center
 
 ## Backup and Disaster Recovery
 
-1. Enable automated PostgreSQL backups
-2. Configure geo-replication for critical data
-3. Test restore procedures regularly
-4. Document recovery time objectives (RTO) and recovery point objectives (RPO)
+1. **Database Backups**:
+   - Automated daily backups (7-day retention minimum)
+   - Geo-redundant backups for production
+
+2. **Application State**:
+   - Use Azure Backup for configuration
+   - Document infrastructure as code
+
+3. **Recovery Testing**:
+   - Monthly restore drills
+   - Document RTO/RPO requirements
 
 ## Next Steps
 
-1. Set up staging environment
-2. Implement CI/CD for database migrations
-3. Configure custom domain and SSL
-4. Set up Azure Front Door for global distribution
-5. Implement Azure Policy for governance
+1. **Production Readiness**:
+   - Configure custom domain and SSL
+   - Set up staging environments
+   - Implement blue-green deployments
 
-For support and questions, refer to the Azure documentation or create an issue in the repository.
+2. **Performance Optimization**:
+   - Enable Azure Front Door for global distribution
+   - Implement aggressive caching strategies
+   - Optimize database queries
+
+3. **Governance**:
+   - Implement Azure Policy
+   - Set up cost budgets and alerts
+   - Configure resource tagging
+
+For additional support, refer to the Azure documentation or create an issue in the repository.

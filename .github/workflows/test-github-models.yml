@@ -1,0 +1,210 @@
+name: Test with GitHub Models
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.23'
+  NODE_VERSION: '18'
+
+jobs:
+  test-backend:
+    name: Test Backend with GitHub Models
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      run: |
+        go mod download
+        go mod tidy
+
+    - name: Run tests with GitHub Models
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CONFIG_FILE: configs/github-models.yaml
+      run: |
+        # Create data directory
+        mkdir -p data
+        
+        # Run unit tests
+        go test -v ./internal/... -tags=github_models
+        
+        # Run integration tests with GitHub Models
+        go test -v ./internal/playground/tests/... -tags=integration,github_models
+
+  test-agents:
+    name: Test Agents with GitHub Models
+    runs-on: ubuntu-latest
+    needs: test-backend
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Test Agent Interactions
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CONFIG_FILE: configs/github-models.yaml
+      run: |
+        # Test individual agents
+        go test -v ./internal/agents/... -tags=github_models
+        
+        # Test agent coordination
+        go test -v ./internal/evaluation/... -tags=github_models
+
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Run frontend tests
+      working-directory: frontend
+      run: npm test -- --watchAll=false
+
+    - name: Build frontend
+      working-directory: frontend
+      run: npm run build
+
+  integration-test:
+    name: Integration Test with GitHub Models
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-agents, test-frontend]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: escoffier
+          POSTGRES_PASSWORD: test123
+          POSTGRES_DB: escoffier_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Initialize database
+      env:
+        PGPASSWORD: test123
+      run: |
+        psql -h localhost -U escoffier -d escoffier_test -f init.sql
+
+    - name: Run integration tests
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DATABASE_URL: "postgresql://escoffier:test123@localhost:5432/escoffier_test?sslmode=disable"
+        REDIS_URL: "redis://localhost:6379/0"
+        CONFIG_FILE: configs/github-models.yaml
+      run: |
+        # Start the backend server
+        go run cmd/main.go &
+        SERVER_PID=$!
+        
+        # Wait for server to be ready
+        for i in {1..30}; do
+          if curl -f http://localhost:8080/health; then
+            break
+          fi
+          sleep 1
+        done
+        
+        # Run API tests
+        go test -v ./internal/api/... -tags=integration,github_models
+        
+        # Stop the server
+        kill $SERVER_PID
+
+  benchmark:
+    name: Benchmark with GitHub Models
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: integration-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run benchmarks
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CONFIG_FILE: configs/github-models.yaml
+      run: |
+        # Run performance benchmarks
+        go test -bench=. -benchmem ./internal/... -tags=github_models | tee benchmark.txt
+        
+        # Save benchmark results
+        mkdir -p artifacts
+        mv benchmark.txt artifacts/
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: artifacts/benchmark.txt

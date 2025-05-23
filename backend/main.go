@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"masterchef/backend/handlers"
+	"escoffier/backend/handlers"
 	"escoffier/internal/database"
 	"net/http"
 	"os"
@@ -19,7 +19,7 @@ import (
 
 func main() {
 	// Initialize database
-	if err := database.InitDB("masterchef.db"); err != nil {
+	if err := database.InitDB("escoffier.db"); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
@@ -73,7 +73,7 @@ func setupRoutes(router *gin.Engine) {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
-			"message": "MasterChef-Bench API is running",
+			"message": "Escoffier-Bench API is running",
 		})
 	})
 
@@ -101,7 +101,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 			return []byte("your_secret_key"), nil
 		})
 

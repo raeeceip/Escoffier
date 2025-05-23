@@ -90,7 +90,7 @@ func initialModel() Model {
 
 	// Initialize main menu
 	mainMenu := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	mainMenu.Title = "MasterChef-Bench CLI"
+	mainMenu.Title = "Escoffier-Bench CLI"
 
 	// Initialize kitchen view
 	columns := []table.Column{

@@ -12,7 +12,7 @@ import (
 
 const baseURL = "http://localhost:8080"
 
-// ApiClient handles API requests to the MasterChef-Bench API
+// ApiClient handles API requests to the Escoffier-Bench API
 type ApiClient struct {
 	httpClient *http.Client
 	BaseURL    string
@@ -21,7 +21,7 @@ type ApiClient struct {
 
 // NewApiClient creates a new API client
 func NewApiClient() *ApiClient {
-	baseURL := os.Getenv("MASTERCHEF_API_URL")
+	baseURL := os.Getenv("ESCOFFIER_API_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8080"
 	}

@@ -1,24 +1,48 @@
-# Escoffier-Bench Configuration
+# GitHub Models Configuration for Free Testing
+# This configuration uses GitHub Models which provides free access to various LLMs
 
 # API Configuration
 api:
   port: 8080
   host: "localhost"
-  debug: false
+  debug: true
 
-# OpenAI Configuration
-openai_key: "${OPENAI_API_KEY}" # Set via environment variable
+# GitHub Models Configuration
+github:
+  # Get your GitHub token from: https://github.com/settings/tokens
+  # The token needs the 'repo' scope
+  token: "${GITHUB_TOKEN}"
+  
+  # Available models:
+  # - gpt-4o (most capable)
+  # - gpt-4o-mini (faster, cheaper)
+  # - phi-3.5-mini-instruct
+  # - meta-llama-3.1-8b-instruct
+  # - meta-llama-3.1-70b-instruct
+  # - mistral-nemo
+  # - cohere-command-r
+  model: "gpt-4o-mini"
+  
+  # API endpoint
+  endpoint: "https://models.inference.ai.azure.com"
+
+# Model configuration
 model_config:
-  model: "gpt-4-turbo-preview"
   temperature: 0.7
-  max_tokens: 4096
+  max_tokens: 2048
+  provider: "github-models"
 
-# Database Configuration
-database_url: "postgresql://localhost:5432/escoffier?sslmode=disable"
+# Database Configuration (SQLite for local testing)
+database_url: "sqlite://data/escoffier.db"
 database_config:
-  max_connections: 20
+  max_connections: 10
   idle_timeout: "5m"
   max_idle_connections: 5
+
+# Redis Configuration (optional for local testing)
+redis:
+  enabled: false
+  url: "redis://localhost:6379/0"
 
 # Metrics Configuration
 metrics:
@@ -28,11 +52,11 @@ metrics:
   collection_interval: "10s"
 
 # Logging Configuration
-log_level: "info"
-log_format: "json"
+log_level: "debug"
+log_format: "text"
 log_output: "stdout"
 
-# Agent Configuration
+# Agent Configuration (same as main config)
 agents:
   executive_chef:
     permissions:
@@ -108,16 +132,10 @@ evaluation:
 # Memory System Configuration
 memory:
   vector_store:
-    engine: "redis"
+    engine: "memory"  # In-memory for testing
     dimension: 1536
     similarity_threshold: 0.8
   cache:
-    type: "redis"
+    type: "memory"
     ttl: "1h"
-    max_size: "1GB"
-
-# Prometheus Configuration
-prometheus:
-  retention_time: "15d"
-  scrape_interval: "15s"
-  evaluation_interval: "15s"
+    max_size: "100MB"

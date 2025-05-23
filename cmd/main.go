@@ -186,7 +186,7 @@ func loadConfig(path string) (*Config, error) {
 
 func defaultConfig() *Config {
 	return &Config{
-		DatabaseURL: filepath.Join("data", "masterchef.db"),
+		DatabaseURL: filepath.Join("data", "escoffier.db"),
 		MetricsConfig: struct {
 			Enabled bool   `yaml:"enabled"`
 			Port    int    `yaml:"port"`

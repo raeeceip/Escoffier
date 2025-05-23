@@ -1,10 +1,10 @@
-# MasterChef-Bench
+# Escoffier-Bench
 
 A comprehensive benchmarking tool for large language models in kitchen management scenarios.
 
 ## Overview
 
-MasterChef-Bench evaluates LLMs on their ability to perform complex real-world tasks in a simulated kitchen environment. The benchmark tests role coherence, task completion, coordination, and other metrics across multiple roles in a kitchen hierarchy.
+Escoffier-Bench evaluates LLMs on their ability to perform complex real-world tasks in a simulated kitchen environment. The benchmark tests role coherence, task completion, coordination, and other metrics across multiple roles in a kitchen hierarchy.
 
 ## Features
 
@@ -24,14 +24,14 @@ MasterChef-Bench evaluates LLMs on their ability to perform complex real-world t
 - **Go 1.22+** (for backend services)
 - **Node.js 18+** (for frontend)
 - **npm** (comes with Node.js)
-- **LLM API keys** (OpenAI, Anthropic, Google - optional for development)
+- **LLM API keys** (OpenAI, Anthropic, Google - optional, or use free GitHub Models)
 
 ### 🚀 One-Command Start
 
 ```bash
 # Clone and start everything
 git clone <repository-url>
-cd masterchef-bench
+cd escoffier-bench
 ./start-all.sh
 ```
 
@@ -98,6 +98,9 @@ cd frontend && npm start
 export OPENAI_API_KEY=your_openai_key
 export ANTHROPIC_API_KEY=your_anthropic_key
 export GOOGLE_API_KEY=your_google_key
+
+# Free GitHub Models (recommended for testing)
+export GITHUB_TOKEN=your_github_token
 
 # Database (optional, defaults to SQLite)
 export DATABASE_URL=data/masterchef.db

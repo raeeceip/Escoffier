@@ -84,7 +84,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "rate(http_requests_total{job=\"masterchef\"}[5m])",
+          "expr": "rate(http_requests_total{job=\"escoffier\"}[5m])",
           "refId": "A"
         }
       ],
@@ -139,7 +139,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "up{job=\"masterchef\"}",
+          "expr": "up{job=\"escoffier\"}",
           "refId": "A"
         }
       ],
@@ -208,12 +208,12 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"masterchef\"}[5m])) * 1000",
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"escoffier\"}[5m])) * 1000",
           "legendFormat": "95th percentile",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"masterchef\"}[5m])) * 1000",
+          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"escoffier\"}[5m])) * 1000",
           "legendFormat": "50th percentile",
           "refId": "B"
         }
@@ -283,12 +283,12 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "masterchef_active_agents",
+          "expr": "escoffier_active_agents",
           "legendFormat": "Active Agents",
           "refId": "A"
         },
         {
-          "expr": "masterchef_pending_orders",
+          "expr": "escoffier_pending_orders",
           "legendFormat": "Pending Orders",
           "refId": "B"
         }
@@ -300,7 +300,7 @@
   "refresh": "5s",
   "schemaVersion": 30,
   "style": "dark",
-  "tags": ["masterchef"],
+  "tags": ["escoffier"],
   "templating": {
     "list": []
   },
@@ -311,6 +311,6 @@
   "timepicker": {},
   "timezone": "",
   "title": "escoffierOverview",
-  "uid": "masterchef-overview",
+  "uid": "escoffier-overview",
   "version": 0
 }

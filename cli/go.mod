@@ -1,4 +1,4 @@
-module masterchef/cli
+module escoffier/cli
 
 go 1.22
 

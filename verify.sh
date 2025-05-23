@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# MasterChef-Bench Verification Script
+# Escoffier-Bench Verification Script
 # Verifies that all components are properly built and configured
 
 set -e
 
-echo "🧑‍🍳 MasterChef-Bench System Verification"
+echo "🧑‍🍳 Escoffier-Bench System Verification"
 echo "========================================"
 
 # Colors
@@ -55,7 +55,7 @@ fi
 echo ""
 echo "Checking build artifacts..."
 
-if [ -f "cmd/masterchef" ]; then
+if [ -f "cmd/escoffier" ]; then
     pass "Backend binary built"
 else
     fail "Backend binary not found (run 'make build')"
@@ -119,7 +119,7 @@ echo "Testing Go modules..."
 go mod verify > /dev/null 2>&1 && pass "Go modules verified" || fail "Go module issues"
 
 echo "Testing backend help..."
-if ./cmd/escoffier--help > /dev/null 2>&1; then
+if ./cmd/escoffier --help > /dev/null 2>&1; then
     pass "Backend binary functional"
 else
     fail "Backend binary has issues"
@@ -147,7 +147,7 @@ echo "  # or"
 echo "  ./dev.sh"
 echo ""
 echo "Individual components:"
-echo "  Backend:  ./cmd/masterchef"
+echo "  Backend:  ./cmd/escoffier"
 echo "  CLI:      ./cli/cli"
 echo "  Frontend: cd frontend && npm start"
 echo ""
