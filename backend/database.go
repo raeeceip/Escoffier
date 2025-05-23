@@ -16,23 +16,23 @@ var db *gorm.DB
 // Kitchen represents the state of the kitchen
 type Kitchen struct {
 	gorm.Model
-	Inventory []InventoryItem
-	Equipment []EquipmentItem
-	Status    string
+	Status string
 }
 
 // InventoryItem represents an item in the kitchen inventory
 type InventoryItem struct {
 	gorm.Model
-	Name     string
-	Quantity int
+	KitchenID uint
+	Name      string
+	Quantity  int
 }
 
 // EquipmentItem represents an item of equipment in the kitchen
 type EquipmentItem struct {
 	gorm.Model
-	Name   string
-	Status string
+	KitchenID uint
+	Name      string
+	Status    string
 }
 
 // InitializeDatabase initializes the database schema
@@ -275,8 +275,6 @@ func GetKitchenState() Kitchen {
 	db := database.GetDB()
 	var kitchen Kitchen
 	db.First(&kitchen)
-	db.Model(&kitchen).Related(&kitchen.Inventory)
-	db.Model(&kitchen).Related(&kitchen.Equipment)
 	return kitchen
 }
 

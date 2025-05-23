@@ -63,15 +63,25 @@ const LLMPlayground: React.FC = () => {
 
   const setupWebSocket = () => {
     try {
-      const ws = new WebSocket(`ws://${window.location.host}/ws`);
+      // Use the proxied WebSocket URL
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//localhost:8090/ws`);
       
       ws.onopen = () => {
         appendLog('Connected to server');
+        setError(null); // Clear any previous errors
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data) as EvaluationResult;
+          
+          // Handle error messages
+          if ('error' in data) {
+            appendLog(`Error: ${(data as any).error}`);
+            return;
+          }
+          
           if (data.metrics) {
             setMetrics(data.metrics);
           }
@@ -88,13 +98,18 @@ const LLMPlayground: React.FC = () => {
         }
       };
 
-      ws.onclose = () => {
-        appendLog('Disconnected from server');
+      ws.onclose = (event) => {
+        appendLog(`Disconnected from server (code: ${event.code}, reason: ${event.reason || 'none'})`);
+        // Attempt to reconnect after 3 seconds
+        setTimeout(() => {
+          appendLog('Attempting to reconnect...');
+          setupWebSocket();
+        }, 3000);
       };
 
-      ws.onerror = (error) => {
-        appendLog(`WebSocket error: ${error.type}`);
-        setError('Failed to connect to WebSocket server. Please check if the server is running.');
+      ws.onerror = () => {
+        appendLog(`WebSocket error occurred`);
+        setError('Failed to connect to WebSocket server. Please check if the server is running on port 8090.');
       };
 
       wsRef.current = ws;

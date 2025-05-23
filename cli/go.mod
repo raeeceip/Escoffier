@@ -1,6 +1,6 @@
 module masterchef/cli
 
-go 1.16
+go 1.22
 
 require (
 	github.com/charmbracelet/bubbles v0.16.1

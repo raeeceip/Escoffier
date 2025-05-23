@@ -26,6 +26,7 @@ jobs:
         with:
           go-version: "1.22"
           cache: true
+          cache-dependency-path: go.sum
 
       - name: Check out code
         uses: actions/checkout@v4
@@ -34,10 +35,7 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: |
-          go test -v ./internal/monitoring
-          go test -v ./internal/evaluation
-          go test -v ./internal/playground/tests
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
         env:
           GIN_MODE: test
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
@@ -53,6 +51,7 @@ jobs:
         with:
           go-version: "1.22"
           cache: true
+          cache-dependency-path: go.sum
 
       - name: Check out code
         uses: actions/checkout@v4
@@ -61,4 +60,4 @@ jobs:
         run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
 
       - name: Run golangci-lint
-        run: golangci-lint run --timeout=5m
+        run: golangci-lint run --timeout=10m

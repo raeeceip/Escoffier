@@ -1,8 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { io } from 'socket.io-client';
-
-const socket = io('http://localhost:8080');
 
 interface AgentPosition {
   x: number;
@@ -17,6 +14,8 @@ interface KitchenState {
 
 const KitchenVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
 
   useEffect(() => {
     const svg = d3.select(svgRef.current);
@@ -25,28 +24,88 @@ const KitchenVisualization: React.FC = () => {
 
     svg.attr('width', width).attr('height', height);
 
-    socket.on('kitchenState', (data: KitchenState) => {
-      // Clear previous visualization
-      svg.selectAll('*').remove();
+    const connectWebSocket = () => {
+      try {
+        const ws = new WebSocket('ws://localhost:8080/ws');
+        
+        ws.onopen = () => {
+          setConnectionStatus('Connected');
+          console.log('Connected to kitchen visualization server');
+        };
 
-      // Create visualization based on data
-      svg
-        .selectAll('circle')
-        .data(data.agents)
-        .enter()
-        .append('circle')
-        .attr('cx', (d: AgentPosition) => d.x)
-        .attr('cy', (d: AgentPosition) => d.y)
-        .attr('r', 10)
-        .attr('fill', 'blue');
-    });
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'kitchenState' && data.state) {
+              const kitchenState: KitchenState = data.state;
+              
+              // Clear previous visualization
+              svg.selectAll('*').remove();
+
+              // Create visualization based on data
+              svg
+                .selectAll('circle')
+                .data(kitchenState.agents)
+                .enter()
+                .append('circle')
+                .attr('cx', (d: AgentPosition) => d.x)
+                .attr('cy', (d: AgentPosition) => d.y)
+                .attr('r', 10)
+                .attr('fill', 'blue');
+              
+              // Add agent names
+              svg
+                .selectAll('text')
+                .data(kitchenState.agents)
+                .enter()
+                .append('text')
+                .attr('x', (d: AgentPosition) => d.x)
+                .attr('y', (d: AgentPosition) => d.y - 15)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '12px')
+                .text((d: AgentPosition) => d.name);
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+
+        ws.onclose = () => {
+          setConnectionStatus('Disconnected');
+          console.log('Disconnected from kitchen visualization server');
+          // Attempt to reconnect after 3 seconds
+          setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = () => {
+          setConnectionStatus('Error');
+          console.error('WebSocket error occurred');
+        };
+
+        wsRef.current = ws;
+      } catch (error) {
+        console.error('Failed to establish WebSocket connection:', error);
+        setConnectionStatus('Error');
+      }
+    };
+
+    connectWebSocket();
 
     return () => {
-      socket.off('kitchenState');
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, []);
 
-  return <svg ref={svgRef}></svg>;
+  return (
+    <div>
+      <div style={{ marginBottom: '10px' }}>
+        <strong>Connection Status:</strong> {connectionStatus}
+      </div>
+      <svg ref={svgRef}></svg>
+    </div>
+  );
 };
 
 export default KitchenVisualization;

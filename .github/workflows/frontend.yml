@@ -40,9 +40,11 @@ jobs:
 
       - name: Lint
         run: npm run lint
+        timeout-minutes: 5
 
       - name: Build
         run: npm run build
 
       - name: Test
-        run: npm test -- --passWithNoTests
+        run: npm test -- --passWithNoTests --watchAll=false
+        timeout-minutes: 10

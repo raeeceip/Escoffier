@@ -1,17 +1,32 @@
 version: "3.8"
 
 services:
-  agent-service:
+  masterchef:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: masterchef-api
     environment:
+      # API Keys - loaded from .env file
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Database
       - DATABASE_URL=postgresql://masterchef:masterchef@postgres:5432/masterchef?sslmode=disable
+      # Redis
       - REDIS_URL=redis://redis:6379/0
-      - LOG_LEVEL=info
+      # Server Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+      - METRICS_PORT=8090
+      - GIN_MODE=release
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Tracing
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
     ports:
-      - "8080:8080"
+      - "8080:8080"  # API
+      - "8090:8090"  # Metrics/Playground
     depends_on:
       postgres:
         condition: service_healthy
@@ -20,22 +35,28 @@ services:
     networks:
       - masterchef-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    volumes:
+      - ./data:/app/data
+      - ./configs:/app/configs:ro
+    restart: unless-stopped
 
   postgres:
     image: postgres:14-alpine
+    container_name: masterchef-postgres
     environment:
-      - POSTGRES_USER=masterchef
-      - POSTGRES_PASSWORD=masterchef
-      - POSTGRES_DB=masterchef
+      - POSTGRES_USER=${POSTGRES_USER:-masterchef}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-masterchef}
+      - POSTGRES_DB=${POSTGRES_DB:-masterchef}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - masterchef-net
     healthcheck:
@@ -43,9 +64,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7.0-alpine
+    container_name: masterchef-redis
     ports:
       - "6379:6379"
     volumes:
@@ -57,13 +80,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    command: redis-server --appendonly yes
 
   prometheus:
     image: prom/prometheus:latest
+    container_name: masterchef-prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     networks:
       - masterchef-net
@@ -73,40 +99,74 @@ services:
       - '--storage.tsdb.retention.time=15d'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
+    container_name: masterchef-grafana
     ports:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     networks:
       - masterchef-net
     depends_on:
       - prometheus
+    restart: unless-stopped
 
   jaeger:
     image: jaegertracing/all-in-one:latest
+    container_name: masterchef-jaeger
     ports:
       - "16686:16686"  # UI
       - "14250:14250"  # gRPC
+      - "6831:6831/udp" # Agent
     environment:
       - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
     networks:
       - masterchef-net
+    restart: unless-stopped
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: masterchef-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@masterchef.local}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin}
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "5050:80"
+    networks:
+      - masterchef-net
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+    restart: unless-stopped
 
 volumes:
   postgres-data:
+    driver: local
   redis-data:
+    driver: local
   prometheus-data:
+    driver: local
   grafana-data:
+    driver: local
 
 networks:
   masterchef-net:
-    driver: bridge 
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
