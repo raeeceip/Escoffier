@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"masterchef/internal/database"
-	"masterchef/internal/models"
+	"escoffier/internal/database"
+	"escoffier/internal/models"
 
 	"github.com/gin-gonic/gin"
 )

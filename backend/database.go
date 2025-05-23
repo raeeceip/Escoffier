@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"masterchef/internal/database"
-	"masterchef/internal/models"
+	"escoffier/internal/database"
+	"escoffier/internal/models"
 	"time"
 
 	"github.com/jinzhu/gorm"

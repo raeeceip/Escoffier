@@ -318,7 +318,7 @@ scrape_configs:
 ```json
 {
 	"dashboard": {
-		"title": "MasterChef LLM Evaluation",
+		"title": "escoffierLLM Evaluation",
 		"panels": [
 			{
 				"title": "Model Performance Comparison",

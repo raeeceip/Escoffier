@@ -124,12 +124,12 @@ docker-clean: docker-stop ## Clean Docker resources
 # Database targets
 db-init: ## Initialize database
 	@echo "Initializing database..."
-	@psql -h localhost -U masterchef -d masterchef -f init.sql || echo "Using SQLite fallback"
+	@psql -h localhost -U escoffier-d escoffier-f init.sql || echo "Using SQLite fallback"
 
 db-reset: ## Reset database (WARNING: Deletes all data!)
 	@echo "Resetting database..."
 	@rm -f data/*.db
-	@docker-compose exec postgres psql -U masterchef -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" 2>/dev/null || true
+	@docker-compose exec postgres psql -U escoffier-c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" 2>/dev/null || true
 
 db-migrate: ## Run database migrations
 	@echo "Running migrations..."

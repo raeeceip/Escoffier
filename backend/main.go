@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"masterchef/backend/handlers"
-	"masterchef/internal/database"
+	"escoffier/internal/database"
 	"net/http"
 	"os"
 	"os/signal"

@@ -3,7 +3,7 @@ package evaluation
 import (
 	"time"
 
-	"masterchef/internal/models"
+	"escoffier/internal/models"
 )
 
 // Agent represents an agent being evaluated

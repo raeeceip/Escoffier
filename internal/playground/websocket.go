@@ -3,7 +3,7 @@ package playground
 import (
 	"encoding/json"
 	"log"
-	"masterchef/internal/evaluation"
+	"escoffier/internal/evaluation"
 	"net/http"
 	"sync"
 	"time"

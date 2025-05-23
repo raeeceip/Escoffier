@@ -1,4 +1,4 @@
-module masterchef
+module escoffier
 
 go 1.22.0
 

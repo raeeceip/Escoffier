@@ -64,8 +64,8 @@ for port in 3000 8080 8090 9090; do
     fi
 done
 
-# Kill any remaining masterchef processes
-print_status "Checking for remaining MasterChef processes..."
+# Kill any remaining escoffierprocesses
+print_status "Checking for remaining escoffierprocesses..."
 pkill -f "masterchef" 2>/dev/null || true
 pkill -f "react-scripts start" 2>/dev/null || true
 

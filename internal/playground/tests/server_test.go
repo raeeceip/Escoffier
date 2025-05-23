@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"masterchef/internal/playground"
+	"escoffier/internal/playground"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

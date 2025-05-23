@@ -1,18 +1,18 @@
 version: "3.8"
 
 services:
-  masterchef:
+  escoffier:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: masterchef-api
+    container_name: escoffier-api
     environment:
       # API Keys - loaded from .env file
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       # Database
-      - DATABASE_URL=postgresql://masterchef:masterchef@postgres:5432/masterchef?sslmode=disable
+      - DATABASE_URL=postgresql://escoffier:escoffier@postgres:5432/escoffier?sslmode=disable
       # Redis
       - REDIS_URL=redis://redis:6379/0
       # Server Configuration
@@ -33,7 +33,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - masterchef-net
+      - escoffier-net
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -47,20 +47,20 @@ services:
 
   postgres:
     image: postgres:14-alpine
-    container_name: masterchef-postgres
+    container_name: escoffier-postgres
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-masterchef}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-masterchef}
-      - POSTGRES_DB=${POSTGRES_DB:-masterchef}
+      - POSTGRES_USER=${POSTGRES_USER:-escoffier}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-escoffier}
+      - POSTGRES_DB=${POSTGRES_DB:-escoffier}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
-      - masterchef-net
+      - escoffier-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U masterchef"]
+      test: ["CMD-SHELL", "pg_isready -U escoffier"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -68,13 +68,13 @@ services:
 
   redis:
     image: redis:7.0-alpine
-    container_name: masterchef-redis
+    container_name: escoffier-redis
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
-      - masterchef-net
+      - escoffier-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -85,14 +85,14 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: masterchef-prometheus
+    container_name: escoffier-prometheus
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     networks:
-      - masterchef-net
+      - escoffier-net
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -104,7 +104,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: masterchef-grafana
+    container_name: escoffier-grafana
     ports:
       - "3000:3000"
     volumes:
@@ -117,14 +117,14 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     networks:
-      - masterchef-net
+      - escoffier-net
     depends_on:
       - prometheus
     restart: unless-stopped
 
   jaeger:
     image: jaegertracing/all-in-one:latest
-    container_name: masterchef-jaeger
+    container_name: escoffier-jaeger
     ports:
       - "16686:16686"  # UI
       - "14250:14250"  # gRPC
@@ -133,21 +133,21 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
       - SPAN_STORAGE_TYPE=memory
     networks:
-      - masterchef-net
+      - escoffier-net
     restart: unless-stopped
 
   # Optional: pgAdmin for database management
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: masterchef-pgadmin
+    container_name: escoffier-pgadmin
     environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@masterchef.local}
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@escoffier.local}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin}
       - PGADMIN_CONFIG_SERVER_MODE=False
     ports:
       - "5050:80"
     networks:
-      - masterchef-net
+      - escoffier-net
     depends_on:
       - postgres
     profiles:
@@ -165,7 +165,7 @@ volumes:
     driver: local
 
 networks:
-  masterchef-net:
+  escoffier-net:
     driver: bridge
     ipam:
       config:

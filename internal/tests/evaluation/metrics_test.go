@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"masterchef/internal/evaluation"
+	"escoffier/internal/evaluation"
 
 	"github.com/stretchr/testify/assert"
 )

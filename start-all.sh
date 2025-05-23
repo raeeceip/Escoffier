@@ -71,7 +71,7 @@ check_dependencies() {
 # Build backend
 build_backend() {
     print_status "Building backend..."
-    go build -o masterchef cmd/main.go
+    go build -o escoffiercmd/main.go
     print_status "Backend built successfully"
 }
 
@@ -117,7 +117,7 @@ start_services() {
     
     # Start backend API server
     print_status "Starting backend server..."
-    ./masterchef > "$BACKEND_LOG" 2>&1 &
+    ./escoffier> "$BACKEND_LOG" 2>&1 &
     BACKEND_PID=$!
     echo "$BACKEND_PID" >> "$PID_FILE"
     print_status "Backend server started (PID: $BACKEND_PID)"

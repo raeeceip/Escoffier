@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"masterchef/internal/models"
+	"escoffier/internal/models"
 
 	"github.com/tmc/langchaingo/llms"
 )

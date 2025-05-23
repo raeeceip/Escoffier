@@ -67,7 +67,7 @@ make install-tools
 ```bash
 # Using PostgreSQL (requires running PostgreSQL)
 psql -h localhost -U postgres -c "CREATE DATABASE masterchef;"
-psql -h localhost -U postgres -d masterchef -f init.sql
+psql -h localhost -U postgres -d escoffier-f init.sql
 
 # Or use SQLite (automatic fallback)
 # Database will be created automatically in data/masterchef.db
@@ -194,13 +194,15 @@ npm run build
 ### Database Connection Issues
 
 1. Check if PostgreSQL is running:
+
    ```bash
    docker-compose ps postgres
    ```
 
 2. Verify connection:
+
    ```bash
-   psql -h localhost -U masterchef -d masterchef
+   psql -h localhost -U escoffier-d masterchef
    ```
 
 3. Fall back to SQLite:
@@ -215,7 +217,7 @@ Edit `configs/config.yaml` for system configuration:
 
 ```yaml
 database:
-  type: "postgres"  # or "sqlite"
+  type: "postgres" # or "sqlite"
   url: "postgresql://masterchef:masterchef@localhost:5432/masterchef"
 
 api:
@@ -286,6 +288,7 @@ make health
 ## Support
 
 For issues or questions:
+
 1. Check the [troubleshooting section](#troubleshooting)
 2. Review logs: `make logs`
 3. Open an issue on GitHub

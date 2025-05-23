@@ -1,9 +1,9 @@
 package playground
 
 import (
-	"masterchef/internal/evaluation"
-	"masterchef/internal/models"
-	"masterchef/internal/monitoring"
+	"escoffier/internal/evaluation"
+	"escoffier/internal/models"
+	"escoffier/internal/monitoring"
 
 	"github.com/gin-gonic/gin"
 )

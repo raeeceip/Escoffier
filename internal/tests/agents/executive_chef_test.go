@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"masterchef/internal/agents"
-	"masterchef/internal/models"
+	"escoffier/internal/agents"
+	"escoffier/internal/models"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

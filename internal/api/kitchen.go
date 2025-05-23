@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"masterchef/internal/agents"
-	"masterchef/internal/models"
+	"escoffier/internal/agents"
+	"escoffier/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmc/langchaingo/llms"

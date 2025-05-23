@@ -1,8 +1,8 @@
 package main
 
 import (
-	"masterchef/internal/database"
-	"masterchef/internal/models"
+	"escoffier/internal/database"
+	"escoffier/internal/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

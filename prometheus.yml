@@ -18,7 +18,7 @@ rule_files:
 # A scrape configuration containing exactly one endpoint to scrape:
 scrape_configs:
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
-  - job_name: "masterchef-bench"
+  - job_name: "escoffier-bench"
     metrics_path: "/metrics"
     static_configs:
       - targets: ["agent-service:8080"]

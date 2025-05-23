@@ -119,7 +119,7 @@ echo "Testing Go modules..."
 go mod verify > /dev/null 2>&1 && pass "Go modules verified" || fail "Go module issues"
 
 echo "Testing backend help..."
-if ./cmd/masterchef --help > /dev/null 2>&1; then
+if ./cmd/escoffier--help > /dev/null 2>&1; then
     pass "Backend binary functional"
 else
     fail "Backend binary has issues"

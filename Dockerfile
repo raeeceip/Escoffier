@@ -29,18 +29,18 @@ COPY . .
 # Copy frontend build if it exists
 COPY --from=frontend-builder /app/frontend/build ./frontend/build || true
 
-# Build with static linking
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o masterchef-bench ./cmd/main.go
+# Build with static linking for Azure
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o escoffier-bench ./cmd/main.go
 
 FROM alpine:latest
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata
+# Install runtime dependencies and Azure CLI tools
+RUN apk --no-cache add ca-certificates tzdata curl
 
 WORKDIR /app
 
 # Copy binary
-COPY --from=backend-builder /app/masterchef-bench .
+COPY --from=backend-builder /app/escoffier-bench .
 
 # Copy frontend build if it exists
 COPY --from=frontend-builder /app/frontend/build ./frontend/build || true
@@ -53,12 +53,14 @@ COPY --from=backend-builder /app/init.sql ./init.sql
 # Create necessary directories
 RUN mkdir -p data/logs grafana/provisioning/datasources grafana/provisioning/dashboards grafana/dashboards
 
-# Set default environment variables
+# Set default environment variables for Azure
 ENV GIN_MODE="release"
-ENV DATABASE_URL="postgresql://masterchef:masterchef@postgres:5432/masterchef?sslmode=disable"
+ENV DATABASE_URL="postgresql://escoffieradmin:${DB_PASSWORD}@${AZURE_POSTGRES_HOST}:5432/escoffier?sslmode=require"
+ENV REDIS_URL="rediss://:${REDIS_PASSWORD}@${AZURE_REDIS_HOST}:6380/0"
 ENV API_HOST="0.0.0.0"
 ENV API_PORT="8080"
 ENV METRICS_PORT="8090"
+ENV AZURE_ENVIRONMENT="true"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
@@ -67,4 +69,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 EXPOSE 8080 8090
 
 # Run with all features enabled
-CMD ["./masterchef-bench", "--enable-playground", "--enable-monitoring"] 
+CMD ["./escoffier-bench", "--enable-playground", "--enable-monitoring"] 

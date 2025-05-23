@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"masterchef/internal/database"
+	"escoffier/internal/database"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"

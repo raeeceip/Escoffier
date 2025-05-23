@@ -82,7 +82,7 @@ build_all() {
     print_status "Building all components..."
     
     # Build backend
-    go build -o cmd/masterchef cmd/main.go
+    go build -o cmd/escoffiercmd/main.go
     
     # Build CLI
     cd cli
