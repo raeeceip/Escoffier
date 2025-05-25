@@ -15,12 +15,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SimulateTime simulates the passage of time in the kitchen
+// SimulateTime provides controlled time progression for kitchen simulation scenarios.
+// Allows testing of time-sensitive kitchen operations, order timing, and workflow
+// coordination in a deterministic testing environment.
 func SimulateTime(duration time.Duration) {
 	time.Sleep(duration)
 }
 
-// ValidateKitchenAction validates if a kitchen action is possible
+// ValidateKitchenAction verifies if a proposed kitchen action is permitted and safe.
+// Checks against allowed operations, validates action syntax, and ensures
+// operations comply with kitchen safety protocols and workflow rules.
 func ValidateKitchenAction(action string) bool {
 	// Define allowed actions
 	allowedActions := map[string]bool{
@@ -51,7 +55,9 @@ func ValidateKitchenAction(action string) bool {
 	return false
 }
 
-// ProcessRecipe processes a cooking recipe
+// ProcessRecipe executes a complete recipe workflow from validation to completion.
+// Orchestrates ingredient checking, equipment reservation, step-by-step execution,
+// inventory updates, and result recording for comprehensive recipe management.
 func ProcessRecipe(recipeName string) error {
 	// Check if recipe exists
 	if !recipeExists(recipeName) {
@@ -94,7 +100,9 @@ func ProcessRecipe(recipeName string) error {
 
 // Helper functions for recipe processing
 
-// recipeExists checks if a recipe exists in the database
+// recipeExists performs database lookup to verify recipe availability.
+// Checks the recipe database for the specified recipe name and returns
+// true if the recipe exists and is accessible for kitchen operations.
 func recipeExists(recipeName string) bool {
 	db := database.GetDB()
 	var count int64

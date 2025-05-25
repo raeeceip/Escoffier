@@ -6,12 +6,16 @@ import (
 	"time"
 )
 
-// Evaluator handles model evaluations against test scenarios
+// Evaluator orchestrates comprehensive LLM agent performance testing and analysis.
+// Manages test scenarios, executes evaluations, collects metrics, and generates
+// detailed reports for benchmarking agent capabilities in kitchen environments.
 type Evaluator struct {
 	scenarios map[string]*TestScenario
 }
 
-// TestScenario represents a test scenario for LLM evaluation
+// TestScenario defines structured test environments for evaluating agent performance.
+// Specifies scenario parameters, success criteria, environmental conditions,
+// and evaluation metrics for consistent and reproducible agent testing.
 type TestScenario struct {
 	ID          string
 	Name        string
@@ -20,7 +24,9 @@ type TestScenario struct {
 	// Add more fields as needed
 }
 
-// EvaluationResult represents the outcome of an evaluation
+// EvaluationResult contains comprehensive performance data from agent testing sessions.
+// Aggregates quantitative metrics, qualitative assessments, event logs, and
+// comparative analysis data for detailed agent performance evaluation.
 type EvaluationResult struct {
 	Model    string                 `json:"model"`
 	Scenario string                 `json:"scenario"`
@@ -28,14 +34,18 @@ type EvaluationResult struct {
 	Events   []EventLog             `json:"events,omitempty"`
 }
 
-// EventLog represents an occurrence during evaluation
+// EventLog captures timestamped events and decisions during agent evaluation sessions.
+// Records agent actions, environmental changes, decision points, and outcomes
+// for detailed behavioral analysis and performance debugging.
 type EventLog struct {
 	Timestamp time.Time              `json:"timestamp"`
 	Type      string                 `json:"type"`
 	Data      map[string]interface{} `json:"data"`
 }
 
-// NewEvaluator creates a new evaluator instance
+// NewEvaluator creates a fully configured evaluation system with predefined scenarios.
+// Initializes test scenarios, evaluation metrics, and analysis tools required
+// for comprehensive agent performance assessment in kitchen environments.
 func NewEvaluator() *Evaluator {
 	e := &Evaluator{
 		scenarios: make(map[string]*TestScenario),
@@ -44,7 +54,9 @@ func NewEvaluator() *Evaluator {
 	return e
 }
 
-// loadScenarios initializes test scenarios
+// loadScenarios populates the evaluator with predefined test scenarios.
+// Configures standard kitchen situations, stress tests, edge cases, and
+// performance benchmarks for comprehensive agent capability assessment.
 func (e *Evaluator) loadScenarios() {
 	// Add built-in scenarios
 	e.scenarios["busy_night"] = &TestScenario{

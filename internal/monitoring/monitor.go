@@ -5,14 +5,18 @@ import (
 	"time"
 )
 
-// Monitor collects and provides metrics for the playground
+// Monitor provides real-time metrics collection and reporting for the evaluation playground.
+// Tracks performance data, resource usage, evaluation progress, and system health
+// with thread-safe operations for concurrent access during active evaluations.
 type Monitor struct {
 	metrics      map[string]interface{}
 	metricsMutex sync.RWMutex
 	startTime    time.Time
 }
 
-// NewMonitor creates a new monitoring instance
+// NewMonitor initializes a monitoring system with baseline metrics and timing.
+// Sets up thread-safe metric storage, establishes start time for uptime tracking,
+// and prepares the system for real-time performance data collection.
 func NewMonitor() *Monitor {
 	return &Monitor{
 		metrics:   make(map[string]interface{}),
@@ -20,14 +24,18 @@ func NewMonitor() *Monitor {
 	}
 }
 
-// RecordMetric records a metric value
+// RecordMetric safely stores a named metric value with thread-safe access.
+// Supports any metric type and maintains data consistency during concurrent
+// operations from multiple evaluation sessions and monitoring processes.
 func (m *Monitor) RecordMetric(name string, value interface{}) {
 	m.metricsMutex.Lock()
 	defer m.metricsMutex.Unlock()
 	m.metrics[name] = value
 }
 
-// GetMetric returns a specific metric value
+// GetMetric retrieves a specific metric value with thread-safe read access.
+// Returns the current value and existence status for the requested metric,
+// ensuring data consistency during concurrent evaluation operations.
 func (m *Monitor) GetMetric(name string) (interface{}, bool) {
 	m.metricsMutex.RLock()
 	defer m.metricsMutex.RUnlock()
@@ -35,7 +43,9 @@ func (m *Monitor) GetMetric(name string) (interface{}, bool) {
 	return value, exists
 }
 
-// GetMetrics returns all current metrics
+// GetMetrics returns a snapshot of all current metrics with system information.
+// Creates a thread-safe copy of metric data including uptime calculations,
+// providing comprehensive monitoring data for dashboard display and analysis.
 func (m *Monitor) GetMetrics() map[string]interface{} {
 	m.metricsMutex.RLock()
 	defer m.metricsMutex.RUnlock()

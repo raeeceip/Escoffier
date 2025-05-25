@@ -10,7 +10,9 @@ import (
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
-// InitializeEvaluationRoutes initializes the evaluation system routes
+// InitializeEvaluationRoutes sets up endpoints for the LLM agent evaluation system.
+// Provides routes for logging agent actions, collecting performance metrics,
+// and retrieving evaluation data for benchmarking and analysis.
 func InitializeEvaluationRoutes(router *gin.Engine) {
 	router.GET("/evaluation/logs", GetAgentActionLogs)
 	router.POST("/evaluation/logs", LogAgentAction)
@@ -18,14 +20,18 @@ func InitializeEvaluationRoutes(router *gin.Engine) {
 	router.POST("/evaluation/metrics", CollectEvaluationMetrics)
 }
 
-// GetAgentActionLogs handles GET requests to retrieve all agent action logs
+// GetAgentActionLogs retrieves comprehensive logs of all agent actions for analysis.
+// Returns timestamped records of agent decisions, actions taken, and their outcomes
+// used for performance evaluation and behavioral analysis of LLM agents.
 func GetAgentActionLogs(c *gin.Context) {
 	var logs []models.AgentActionLog
 	database.GetDB().Find(&logs)
 	c.JSON(http.StatusOK, logs)
 }
 
-// LogAgentAction handles POST requests to log an agent's action
+// LogAgentAction records a specific agent action with context for evaluation.
+// Captures action type, timing, decision rationale, and environmental context
+// to build comprehensive datasets for agent performance analysis.
 func LogAgentAction(c *gin.Context) {
 	var log models.AgentActionLog
 	if err := c.ShouldBindJSON(&log); err != nil {
@@ -37,14 +43,18 @@ func LogAgentAction(c *gin.Context) {
 	c.JSON(http.StatusCreated, log)
 }
 
-// GetEvaluationMetrics handles GET requests to retrieve evaluation metrics
+// GetEvaluationMetrics retrieves performance metrics for agent benchmarking.
+// Returns quantitative measures of agent effectiveness including success rates,
+// efficiency scores, decision quality, and comparative performance data.
 func GetEvaluationMetrics(c *gin.Context) {
 	var metrics []models.EvaluationMetrics
 	database.GetDB().Find(&metrics)
 	c.JSON(http.StatusOK, metrics)
 }
 
-// CollectEvaluationMetrics handles POST requests to collect evaluation metrics
+// CollectEvaluationMetrics processes and stores new performance measurements.
+// Accepts metric data from various evaluation systems, validates the data,
+// and persists it for analysis and reporting purposes.
 func CollectEvaluationMetrics(c *gin.Context) {
 	var metrics models.EvaluationMetrics
 	if err := c.ShouldBindJSON(&metrics); err != nil {

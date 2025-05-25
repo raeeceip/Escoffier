@@ -25,7 +25,9 @@ const (
 	RoleKitchenPorter AgentRole = "kitchen_porter"
 )
 
-// Agent represents the base interface for all kitchen agents
+// Agent defines the core interface for all kitchen automation agents.
+// Provides standardized methods for task handling, memory management, permission
+// checking, and role-based behavior in the MasterChef-Bench evaluation environment.
 type Agent interface {
 	GetRole() AgentRole
 	GetModel() llms.LLM
@@ -36,7 +38,9 @@ type Agent interface {
 	QueryMemory(ctx context.Context, query string, k int) ([]Event, error)
 }
 
-// BaseAgent provides common functionality for all agents
+// BaseAgent implements common functionality shared across all kitchen agent types.
+// Provides role management, LLM model access, memory systems, permission handling,
+// and foundational capabilities that specialized agents can extend and customize.
 type BaseAgent struct {
 	ID          uint
 	role        AgentRole
@@ -45,14 +49,18 @@ type BaseAgent struct {
 	permissions []string
 }
 
-// Memory represents the agent's memory system
+// Memory manages agent knowledge retention and task queuing systems.
+// Combines short-term working memory, long-term vector storage, and active task
+// management to enable intelligent decision-making and learning capabilities.
 type Memory struct {
 	ShortTerm []Event
 	LongTerm  *VectorStore
 	TaskQueue []Task
 }
 
-// Event represents a single event in the agent's memory
+// Event captures timestamped activities and observations for agent memory.
+// Records kitchen occurrences, decisions, and outcomes with contextual metadata
+// to support learning, recall, and intelligent decision-making processes.
 type Event struct {
 	Timestamp time.Time
 	Type      string
@@ -60,7 +68,9 @@ type Event struct {
 	Metadata  map[string]interface{}
 }
 
-// Task represents a single task in the agent's queue
+// Task represents structured work units with priority and dependency management.
+// Defines kitchen operations with scheduling information, status tracking,
+// and dependency relationships for coordinated multi-agent task execution.
 type Task struct {
 	ID           string
 	Type         string

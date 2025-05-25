@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"escoffier/backend/handlers"
 	"escoffier/internal/database"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -65,7 +65,9 @@ func main() {
 	fmt.Println("Server exited gracefully")
 }
 
-// setupRoutes configures all the API routes
+// setupRoutes configures all HTTP routes and middleware for the MasterChef-Bench API.
+// Establishes endpoints for kitchen management, agent operations, order processing,
+// and evaluation systems with appropriate handlers and authentication.
 func setupRoutes(router *gin.Engine) {
 	fmt.Println("Setting up routes...")
 
@@ -91,7 +93,9 @@ func setupRoutes(router *gin.Engine) {
 	InitializeEvaluationRoutes(router)
 }
 
-// AuthMiddleware handles JWT authentication
+// AuthMiddleware provides JWT-based authentication for protected endpoints.
+// Validates authorization headers, verifies JWT tokens, and ensures requests
+// are properly authenticated before allowing access to sensitive operations.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")

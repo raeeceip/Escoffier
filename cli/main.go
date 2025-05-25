@@ -39,7 +39,9 @@ var (
 			Padding(0, 1)
 )
 
-// Model defines the application state
+// Model represents the complete CLI application state and user interface components.
+// Manages different views, navigation state, data models, and user interactions
+// for the MasterChef-Bench command-line interface using the Bubble Tea framework.
 type Model struct {
 	mainMenu    list.Model
 	kitchenView table.Model

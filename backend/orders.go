@@ -9,7 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// InitializeOrderRoutes initializes the order management routes
+// InitializeOrderRoutes configures HTTP endpoints for order management.
+// Provides complete CRUD operations for customer orders including status tracking,
+// item management, and order lifecycle operations.
 func InitializeOrderRoutes(router *gin.Engine) {
 	router.GET("/orders", GetOrders)
 	router.GET("/orders/:id", GetOrder)
@@ -18,14 +20,18 @@ func InitializeOrderRoutes(router *gin.Engine) {
 	router.DELETE("/orders/:id", CancelOrder)
 }
 
-// GetOrders handles GET requests to retrieve all orders
+// GetOrders retrieves all orders with their associated items and status information.
+// Includes order details, preparation progress, assigned staff, and timing data.
+// Orders are returned with full item details for comprehensive order tracking.
 func GetOrders(c *gin.Context) {
 	var orders []models.Order
 	database.GetDB().Preload("Items").Find(&orders)
 	c.JSON(http.StatusOK, orders)
 }
 
-// GetOrder handles GET requests to retrieve a specific order
+// GetOrder retrieves detailed information for a specific order by ID.
+// Returns complete order data including all items, current status, timing information,
+// and assigned kitchen staff. Returns 404 if order not found.
 func GetOrder(c *gin.Context) {
 	var order models.Order
 	db := database.GetDB()
@@ -36,7 +42,9 @@ func GetOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
-// CreateOrder handles POST requests to create a new order
+// CreateOrder processes new customer orders and adds them to the kitchen queue.
+// Validates order items, calculates timing estimates, assigns initial status,
+// and timestamps the order for tracking. Returns created order with assigned ID.
 func CreateOrder(c *gin.Context) {
 	var order models.Order
 	if err := c.ShouldBindJSON(&order); err != nil {

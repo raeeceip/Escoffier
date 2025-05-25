@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"escoffier/internal/database"
 	"escoffier/internal/models"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -13,13 +13,17 @@ import (
 
 var db *gorm.DB
 
-// Kitchen represents the state of the kitchen
+// Kitchen represents the complete state and configuration of the kitchen environment.
+// Tracks operational status, active sessions, and overall kitchen readiness
+// for coordinating all kitchen activities and agent operations.
 type Kitchen struct {
 	gorm.Model
 	Status string
 }
 
-// InventoryItem represents an item in the kitchen inventory
+// InventoryItem represents individual ingredients and supplies in kitchen storage.
+// Tracks quantities, expiration dates, storage locations, and availability
+// for recipe planning and automatic inventory management.
 type InventoryItem struct {
 	gorm.Model
 	KitchenID uint
@@ -27,7 +31,9 @@ type InventoryItem struct {
 	Quantity  int
 }
 
-// EquipmentItem represents an item of equipment in the kitchen
+// EquipmentItem represents kitchen tools and appliances with their operational status.
+// Manages equipment availability, maintenance schedules, and usage tracking
+// for efficient kitchen resource allocation and workflow optimization.
 type EquipmentItem struct {
 	gorm.Model
 	KitchenID uint
@@ -35,7 +41,9 @@ type EquipmentItem struct {
 	Status    string
 }
 
-// InitializeDatabase initializes the database schema
+// InitializeDatabase creates and configures all required database tables and relationships.
+// Sets up the complete schema for kitchen operations, agent management, order tracking,
+// evaluation metrics, and all supporting data structures with proper indexing.
 func InitializeDatabase() {
 	db := database.GetDB()
 	db.AutoMigrate(

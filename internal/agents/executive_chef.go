@@ -600,29 +600,64 @@ func (ec *ExecutiveChef) calculateMenuUsage(item string) float64 {
 	return usage
 }
 
+// calculateOrderVolume analyzes historical order data to determine average daily demand.
+// Examines past orders, seasonal patterns, and trend data to predict realistic
+// volume expectations for menu planning and inventory management.
 func (ec *ExecutiveChef) calculateOrderVolume(item string) float64 {
-	// Calculate average daily order volume for this item
-	return 5.0 // Placeholder implementation
+	// TODO: Implement historical analysis of order patterns
+	// - Query order history for this item over multiple time periods
+	// - Apply seasonal adjustments based on historical trends
+	// - Factor in restaurant type and customer demographics
+	// - Return calculated average daily volume
+	return 5.0 // Temporary default - needs implementation
 }
 
+// isIngredientInSeason determines ingredient availability and quality during specific months.
+// Considers geographical location, supply chain factors, and seasonal quality variations
+// to optimize menu planning for ingredient freshness and cost effectiveness.
 func (ec *ExecutiveChef) isIngredientInSeason(ingredient string, month time.Month) bool {
-	// Check if ingredient is in season for the given month
-	return true // Placeholder implementation
+	// TODO: Implement comprehensive seasonality checking:
+	// - Load ingredient seasonality database by geographical region
+	// - Check quality and availability patterns for the specified month
+	// - Consider supply chain reliability and pricing fluctuations
+	// - Factor in greenhouse/import alternatives and their cost implications
+	return true // Temporary default - needs region-specific implementation
 }
 
+// hasRequiredEquipment verifies kitchen equipment availability for menu item preparation.
+// Checks equipment inventory against recipe requirements, considers equipment capacity,
+// maintenance schedules, and concurrent usage to ensure feasible menu offerings.
 func (ec *ExecutiveChef) hasRequiredEquipment(item models.MenuItem) bool {
-	// Check if kitchen has all required equipment
-	return true // Placeholder implementation
+	// TODO: Implement comprehensive equipment validation:
+	// - Parse recipe requirements for specific equipment types
+	// - Check current equipment inventory and operational status
+	// - Verify equipment capacity can handle expected order volume
+	// - Consider maintenance schedules and concurrent usage conflicts
+	return true // Temporary default - needs equipment management integration
 }
 
+// hasRequiredSkills evaluates staff capabilities against menu item complexity requirements.
+// Assesses current staff skill levels, training status, and experience to determine
+// if the team can consistently execute the menu item to quality standards.
 func (ec *ExecutiveChef) hasRequiredSkills(item models.MenuItem) bool {
-	// Check if staff has necessary skills
-	return true // Placeholder implementation
+	// TODO: Implement staff skill assessment:
+	// - Analyze recipe complexity and required cooking techniques
+	// - Check staff certifications and experience levels
+	// - Evaluate training requirements for new techniques
+	// - Consider workload distribution and skill availability during service
+	return true // Temporary default - needs staff management integration
 }
 
+// hasRequiredIngredients validates ingredient availability for consistent menu item production.
+// Checks current inventory levels, supplier reliability, and cost constraints
+// to ensure sustainable menu offerings without stockouts or quality compromises.
 func (ec *ExecutiveChef) hasRequiredIngredients(item models.MenuItem) bool {
-	// Check if all ingredients are available
-	return true // Placeholder implementation
+	// TODO: Implement comprehensive ingredient availability checking:
+	// - Verify current inventory levels against recipe requirements
+	// - Check supplier availability and delivery schedules
+	// - Evaluate cost fluctuations and budget constraints
+	// - Consider alternative ingredients and substitution possibilities
+	return true // Temporary default - needs inventory management integration
 }
 
 func (ec *ExecutiveChef) calculateSpecialtyScore(item models.MenuItem) float64 {
@@ -1397,14 +1432,28 @@ func (ec *ExecutiveChef) calculateAssignmentScore(staff *BaseAgent, order models
 	return score
 }
 
+// hasSpecialty determines if a staff member has specialized expertise in preparing specific items.
+// Evaluates staff training records, experience history, and demonstrated proficiency
+// to identify optimal task assignments based on individual strengths and specializations.
 func (ec *ExecutiveChef) hasSpecialty(staff *BaseAgent, itemName string) bool {
-	// Check if staff has this item as a specialty
-	return true // Placeholder implementation
+	// TODO: Implement specialty matching system:
+	// - Query staff training records and certifications
+	// - Check historical performance metrics for this item type
+	// - Evaluate demonstrated proficiency and quality scores
+	// - Consider specialized techniques and ingredient expertise
+	return true // Temporary default - needs staff skill database integration
 }
 
+// getCurrentWorkload calculates staff member's current task load as percentage of capacity.
+// Analyzes active assignments, estimated completion times, and individual performance
+// rates to determine optimal task distribution and prevent staff overload.
 func (ec *ExecutiveChef) getCurrentWorkload(staff *BaseAgent) float64 {
-	// Calculate current workload as a percentage of capacity
-	return 0.5 // Placeholder implementation
+	// TODO: Implement dynamic workload calculation:
+	// - Sum current active task complexity and estimated times
+	// - Factor in individual performance rates and efficiency metrics
+	// - Consider task interdependencies and timing constraints
+	// - Account for break schedules and shift patterns
+	return 0.5 // Temporary default (50% capacity) - needs task tracking integration
 }
 
 // hasSeasonalIngredients checks if the menu item uses currently seasonal ingredients

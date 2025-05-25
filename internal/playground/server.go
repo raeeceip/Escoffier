@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// PlaygroundServer handles LLM evaluation requests
+// PlaygroundServer manages the LLM evaluation and testing environment.
+// Coordinates model interactions, evaluation scenarios, real-time monitoring,
+// and provides web interface for agent performance analysis and benchmarking.
 type PlaygroundServer struct {
 	router    *gin.Engine
 	registry  *models.ModelRegistry
@@ -16,7 +18,9 @@ type PlaygroundServer struct {
 	monitor   *monitoring.Monitor
 }
 
-// NewPlaygroundServer creates a new playground server instance
+// NewPlaygroundServer initializes a complete LLM evaluation playground environment.
+// Sets up model registry, evaluation systems, monitoring infrastructure,
+// and web interface for comprehensive agent testing and performance analysis.
 func NewPlaygroundServer() *PlaygroundServer {
 	server := &PlaygroundServer{
 		router:    gin.Default(),
@@ -29,7 +33,9 @@ func NewPlaygroundServer() *PlaygroundServer {
 	return server
 }
 
-// setupRoutes configures the API routes
+// setupRoutes configures all HTTP endpoints for the playground API and web interface.
+// Establishes routes for model management, scenario testing, metrics collection,
+// WebSocket connections, and static asset serving for the evaluation dashboard.
 func (s *PlaygroundServer) setupRoutes() {
 	s.router.GET("/", s.handleHome)
 	s.router.GET("/ws", s.handleWebSocket)

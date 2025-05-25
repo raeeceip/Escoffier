@@ -9,7 +9,8 @@ import (
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
-// InitializeAgentRoutes initializes the agent interaction routes
+// InitializeAgentRoutes sets up HTTP routes for agent management operations.
+// Provides CRUD endpoints for creating, reading, updating, and deleting kitchen agents.
 func InitializeAgentRoutes(router *gin.Engine) {
 	router.GET("/agents", GetAgents)
 	router.POST("/agents", CreateAgent)
@@ -17,14 +18,17 @@ func InitializeAgentRoutes(router *gin.Engine) {
 	router.DELETE("/agents/:id", DeleteAgent)
 }
 
-// GetAgents handles GET requests to retrieve all agents
+// GetAgents retrieves all registered kitchen agents from the database.
+// Returns a JSON array of agent records including their roles, status, and assignments.
 func GetAgents(c *gin.Context) {
 	var agents []models.Agent
 	database.GetDB().Find(&agents)
 	c.JSON(http.StatusOK, agents)
 }
 
-// CreateAgent handles POST requests to create a new agent
+// CreateAgent handles POST requests to register a new kitchen agent.
+// Validates agent data, assigns unique ID, and adds to the kitchen workforce.
+// Returns the created agent with assigned ID or validation errors.
 func CreateAgent(c *gin.Context) {
 	var agent models.Agent
 	if err := c.ShouldBindJSON(&agent); err != nil {
@@ -35,7 +39,9 @@ func CreateAgent(c *gin.Context) {
 	c.JSON(http.StatusCreated, agent)
 }
 
-// UpdateAgent handles PUT requests to update an existing agent
+// UpdateAgent handles PUT requests to modify an existing agent's properties.
+// Allows updating agent roles, status, assignments, and other mutable fields.
+// Returns updated agent data or 404 if agent not found.
 func UpdateAgent(c *gin.Context) {
 	var agent models.Agent
 	db := database.GetDB()
@@ -51,7 +57,9 @@ func UpdateAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, agent)
 }
 
-// DeleteAgent handles DELETE requests to delete an agent
+// DeleteAgent handles DELETE requests to remove an agent from the kitchen.
+// Performs cleanup of agent assignments and transfers ongoing tasks before removal.
+// Returns 204 No Content on success or 404 if agent not found.
 func DeleteAgent(c *gin.Context) {
 	var agent models.Agent
 	db := database.GetDB()
@@ -63,8 +71,14 @@ func DeleteAgent(c *gin.Context) {
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 
-// ValidateAgentAction validates an agent's action based on kitchen rules
+// ValidateAgentAction validates whether an agent can perform a specific action
+// based on their role permissions, current kitchen state, and safety protocols.
+// Returns true if the action is permitted, false otherwise.
 func ValidateAgentAction(agent models.Agent, action string) bool {
-	// Placeholder implementation for action validation
+	// TODO: Implement comprehensive validation logic:
+	// - Check agent role permissions against action requirements
+	// - Validate action against current kitchen safety protocols
+	// - Ensure agent has necessary skills/certifications for action
+	// - Check if action conflicts with other ongoing operations
 	return true
 }

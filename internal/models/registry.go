@@ -39,14 +39,19 @@ type ModelProvider struct {
 	Credentials ModelCredentials
 }
 
-// ModelRegistry manages available LLM models
+// ModelRegistry manages LLM provider configurations and model instance lifecycle.
+// Provides centralized model access, caching, initialization, and credential management
+// for all supported LLM providers used in the MasterChef-Bench evaluation system.
 type ModelRegistry struct {
 	providers map[string]*ModelProvider
 	instances map[string]llms.LLM
 	mu        sync.RWMutex
 }
 
-// NewModelRegistry creates a new model registry
+// NewModelRegistry initializes a registry with preconfigured LLM providers.
+// Sets up OpenAI GPT-4, Anthropic Claude, Google Gemini, and local models
+// with appropriate token limits and default configurations for kitchen agent evaluation.
+// TODO: add support for new models, and make the number of tokens configurable
 func NewModelRegistry() *ModelRegistry {
 	return &ModelRegistry{
 		providers: map[string]*ModelProvider{
@@ -75,7 +80,9 @@ func NewModelRegistry() *ModelRegistry {
 	}
 }
 
-// GetModel returns an initialized LLM instance
+// GetModel retrieves or initializes an LLM instance with caching for performance.
+// Returns cached instances when available, or initializes new models on first access.
+// Handles authentication, configuration, and error management for all provider types.
 func (r *ModelRegistry) GetModel(name string) (llms.LLM, error) {
 	// Return cached instance if available
 	if model, exists := r.instances[name]; exists {
@@ -99,7 +106,9 @@ func (r *ModelRegistry) GetModel(name string) (llms.LLM, error) {
 	return model, nil
 }
 
-// initializeModel creates a new LLM instance based on provider type
+// initializeModel creates new LLM instances based on provider-specific requirements.
+// Routes initialization to appropriate provider handlers, manages authentication,
+// and ensures proper configuration for each supported LLM provider type.
 func (r *ModelRegistry) initializeModel(provider *ModelProvider) (llms.LLM, error) {
 	switch provider.Type {
 	case "openai":
@@ -115,7 +124,9 @@ func (r *ModelRegistry) initializeModel(provider *ModelProvider) (llms.LLM, erro
 	}
 }
 
-// initializeOpenAI creates an OpenAI LLM instance
+// initializeOpenAI configures and authenticates OpenAI GPT models.
+// Handles API key validation, model specification, and client initialization
+// for OpenAI services including GPT-4 and other supported model variants.
 func (r *ModelRegistry) initializeOpenAI(provider *ModelProvider) (llms.LLM, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -133,15 +144,18 @@ func (r *ModelRegistry) initializeOpenAI(provider *ModelProvider) (llms.LLM, err
 	return llm, nil
 }
 
-// initializeAnthropic creates an Anthropic LLM instance
+// initializeAnthropic configures Anthropic Claude models with authentication.
+// Currently provides a placeholder implementation until langchaingo adds full
+// Anthropic support, handling API key validation and model configuration.
 func (r *ModelRegistry) initializeAnthropic(provider *ModelProvider) (llms.LLM, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("ANTHROPIC_API_KEY environment variable not set")
 	}
 
-	// Note: This is a simulation since we don't have a direct implementation
-	// When a proper anthropic implementation is available in langchaingo, use it
+	// TODO: Replace with actual Anthropic API integration when available
+	// This temporary implementation provides a placeholder structure until
+	// the langchaingo library includes full Anthropic Claude support
 	anthropicLLM := &CustomLLM{
 		modelName: provider.Name,
 		modelType: "anthropic",
@@ -158,8 +172,9 @@ func (r *ModelRegistry) initializeGoogle(provider *ModelProvider) (llms.LLM, err
 		return nil, fmt.Errorf("GOOGLE_API_KEY environment variable not set")
 	}
 
-	// Note: This is a simulation since we don't have a direct implementation
-	// When a proper Google implementation is available in langchaingo, use it
+	// TODO: Replace with actual Google Gemini API integration when available
+	// This temporary implementation provides a placeholder structure until
+	// the langchaingo library includes full Google Gemini/PaLM support
 	googleLLM := &CustomLLM{
 		modelName: provider.Name,
 		modelType: "google",
