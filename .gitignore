@@ -1,0 +1,8 @@
+test_output
+config.yaml
+.db
+.cpython-*.pyc
+uv.lock
+data/
+
+

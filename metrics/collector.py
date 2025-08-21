@@ -954,49 +954,132 @@ class MetricsCollector:
         }
 
     def export_to_csv(self, output_dir: str) -> list[str]:
-        """Export all metrics data to CSV files"""
+        """Export all metrics data to CSV files with enhanced analytics"""
         import os
         from datetime import datetime
+        import pandas as pd
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         csv_files = []
         
-        # Export agents data
+        # Create analytics subdirectory
+        analytics_dir = os.path.join(output_dir, "analytics")
+        os.makedirs(analytics_dir, exist_ok=True)
+        
+        # Export enhanced agents data
         if self.agents_df is not None and not self.agents_df.empty:
-            agents_file = os.path.join(output_dir, f"agents_{timestamp}.csv")
-            self.agents_df.to_csv(agents_file, index=False)
+            agents_file = os.path.join(analytics_dir, f"agents_{timestamp}.csv")
+            # Ensure all important columns are present
+            enhanced_agents = self.agents_df.copy()
+            if 'llm_provider' not in enhanced_agents.columns:
+                enhanced_agents['llm_provider'] = 'unknown'
+            if 'agent_type' not in enhanced_agents.columns:
+                enhanced_agents['agent_type'] = 'unknown'
+            enhanced_agents.to_csv(agents_file, index=False)
             csv_files.append(agents_file)
         
-        # Export tasks data
+        # Export enhanced tasks data with agent context
         if self.tasks_df is not None and not self.tasks_df.empty:
-            tasks_file = os.path.join(output_dir, f"tasks_{timestamp}.csv")
-            self.tasks_df.to_csv(tasks_file, index=False)
+            tasks_enhanced = self.tasks_df.copy()
+            
+            # Merge with agent data if available
+            if self.agents_df is not None and 'agent_id' in tasks_enhanced.columns:
+                tasks_enhanced = tasks_enhanced.merge(
+                    self.agents_df[['id', 'name', 'agent_type', 'llm_provider']], 
+                    left_on='agent_id', 
+                    right_on='id', 
+                    how='left',
+                    suffixes=('_task', '_agent')
+                )
+                # Rename columns for clarity
+                if 'name_agent' in tasks_enhanced.columns:
+                    tasks_enhanced.rename(columns={'name_agent': 'agent_name'}, inplace=True)
+                if 'id_agent' in tasks_enhanced.columns:
+                    tasks_enhanced.drop(columns=['id_agent'], inplace=True)
+            
+            tasks_file = os.path.join(analytics_dir, f"tasks_{timestamp}.csv")
+            tasks_enhanced.to_csv(tasks_file, index=False)
             csv_files.append(tasks_file)
         
-        # Export actions data
+        # Export actions data with enhanced context
         if self.actions_df is not None and not self.actions_df.empty:
-            actions_file = os.path.join(output_dir, f"actions_{timestamp}.csv")
-            self.actions_df.to_csv(actions_file, index=False)
+            actions_enhanced = self.actions_df.copy()
+            
+            # Merge with agent data if available
+            if self.agents_df is not None and 'agent_id' in actions_enhanced.columns:
+                actions_enhanced = actions_enhanced.merge(
+                    self.agents_df[['id', 'name', 'agent_type', 'llm_provider']], 
+                    left_on='agent_id', 
+                    right_on='id', 
+                    how='left',
+                    suffixes=('_action', '_agent')
+                )
+                if 'name_agent' in actions_enhanced.columns:
+                    actions_enhanced.rename(columns={'name_agent': 'agent_name'}, inplace=True)
+                if 'id_agent' in actions_enhanced.columns:
+                    actions_enhanced.drop(columns=['id_agent'], inplace=True)
+            
+            actions_file = os.path.join(analytics_dir, f"actions_{timestamp}.csv")
+            actions_enhanced.to_csv(actions_file, index=False)
             csv_files.append(actions_file)
         
         # Export calculated metrics
         if hasattr(self, 'metrics_df') and self.metrics_df is not None and not self.metrics_df.empty:
-            metrics_file = os.path.join(output_dir, f"metrics_{timestamp}.csv")
+            metrics_file = os.path.join(analytics_dir, f"metrics_{timestamp}.csv")
             self.metrics_df.to_csv(metrics_file, index=False)
             csv_files.append(metrics_file)
         
-        # Export summary metrics
+        # Export comprehensive summary metrics with provider/type breakdowns
         summary_metrics = self.calculate_all_metrics()
-        summary_file = os.path.join(output_dir, f"summary_metrics_{timestamp}.csv")
-        import pandas as pd
+        
+        # Add provider-specific metrics
+        if self.agents_df is not None and not self.agents_df.empty:
+            provider_stats = self.agents_df['llm_provider'].value_counts().to_dict()
+            for provider, count in provider_stats.items():
+                summary_metrics[f'agents_provider_{provider}'] = count
+                
+            type_stats = self.agents_df['agent_type'].value_counts().to_dict()
+            for agent_type, count in type_stats.items():
+                summary_metrics[f'agents_type_{agent_type}'] = count
+        
+        # Add task performance by provider/type
+        if self.tasks_df is not None and self.agents_df is not None and 'agent_id' in self.tasks_df.columns:
+            task_agent_df = self.tasks_df.merge(
+                self.agents_df[['id', 'agent_type', 'llm_provider']], 
+                left_on='agent_id', 
+                right_on='id', 
+                how='left'
+            )
+            
+            # Provider performance metrics
+            provider_task_stats = task_agent_df.groupby(['llm_provider', 'status']).size().unstack(fill_value=0)
+            for provider in provider_task_stats.index:
+                for status in provider_task_stats.columns:
+                    summary_metrics[f'tasks_{provider}_{status}'] = provider_task_stats.loc[provider, status]
+            
+            # Agent type performance metrics
+            type_task_stats = task_agent_df.groupby(['agent_type', 'status']).size().unstack(fill_value=0)
+            for agent_type in type_task_stats.index:
+                for status in type_task_stats.columns:
+                    summary_metrics[f'tasks_{agent_type}_{status}'] = type_task_stats.loc[agent_type, status]
+        
+        # Export enhanced summary
+        summary_file = os.path.join(analytics_dir, f"summary_metrics_{timestamp}.csv")
         summary_df = pd.DataFrame(list(summary_metrics.items()), columns=['metric', 'value'])
         summary_df.to_csv(summary_file, index=False)
         csv_files.append(summary_file)
         
+        # Export provider-agent matrix for analysis
+        if self.agents_df is not None and not self.agents_df.empty:
+            provider_type_matrix = self.agents_df.groupby(['llm_provider', 'agent_type']).size().reset_index(name='count')
+            matrix_file = os.path.join(analytics_dir, f"provider_agent_matrix_{timestamp}.csv")
+            provider_type_matrix.to_csv(matrix_file, index=False)
+            csv_files.append(matrix_file)
+        
         return csv_files
 
     def generate_charts(self, output_dir: str) -> list[str]:
-        """Generate visualization charts"""
+        """Generate visualization charts with enhanced analytics"""
         import os
         from datetime import datetime
         
@@ -1012,70 +1095,182 @@ class MetricsCollector:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         chart_files = []
         
-        # 1. Agent performance chart
+        # Create charts subdirectory
+        charts_dir = os.path.join(output_dir, "charts")
+        os.makedirs(charts_dir, exist_ok=True)
+        
+        # 1. Enhanced Agent performance chart with provider info
         if self.agents_df is not None and not self.agents_df.empty:
-            fig = px.bar(
-                self.agents_df, 
-                x='name', 
-                y='id',  # Using id as a proxy for count
-                color='agent_type',
-                title='Agents by Type',
-                labels={'id': 'Agent Count', 'name': 'Agent Name'}
+            # Agent performance by provider and type
+            fig = px.sunburst(
+                self.agents_df,
+                path=['llm_provider', 'agent_type', 'name'],
+                title='Agent Distribution by Provider and Type',
+                color='agent_type'
             )
-            agent_chart = os.path.join(output_dir, f"agents_chart_{timestamp}.html")
+            agent_chart = os.path.join(charts_dir, f"agents_hierarchy_{timestamp}.html")
             fig.write_html(agent_chart)
             chart_files.append(agent_chart)
+            
+            # Provider vs Agent Type matrix
+            if 'llm_provider' in self.agents_df.columns and 'agent_type' in self.agents_df.columns:
+                provider_type_matrix = self.agents_df.groupby(['llm_provider', 'agent_type']).size().reset_index(name='count')
+                fig = px.bar(
+                    provider_type_matrix,
+                    x='llm_provider',
+                    y='count',
+                    color='agent_type',
+                    title='Agent Count by Provider and Type',
+                    labels={'count': 'Number of Agents', 'llm_provider': 'LLM Provider'}
+                )
+                matrix_chart = os.path.join(charts_dir, f"provider_type_matrix_{timestamp}.html")
+                fig.write_html(matrix_chart)
+                chart_files.append(matrix_chart)
         
-        # 2. Task status distribution
+        # 2. Enhanced Task analytics with agent context
         if self.tasks_df is not None and not self.tasks_df.empty:
+            # Task status distribution
             status_counts = self.tasks_df['status'].value_counts()
             fig = px.pie(
                 values=status_counts.values,
                 names=status_counts.index,
-                title='Task Status Distribution'
+                title='Task Status Distribution',
+                color_discrete_sequence=px.colors.qualitative.Set3
             )
-            task_chart = os.path.join(output_dir, f"task_status_chart_{timestamp}.html")
+            task_chart = os.path.join(charts_dir, f"task_status_chart_{timestamp}.html")
             fig.write_html(task_chart)
             chart_files.append(task_chart)
+            
+            # Task performance by agent if we have agent info
+            if 'agent_id' in self.tasks_df.columns and self.agents_df is not None:
+                # Merge tasks with agent info
+                task_agent_df = self.tasks_df.merge(
+                    self.agents_df[['id', 'name', 'agent_type', 'llm_provider']], 
+                    left_on='agent_id', 
+                    right_on='id', 
+                    how='left',
+                    suffixes=('_task', '_agent')
+                )
+                
+                if not task_agent_df.empty:
+                    # Task completion by provider
+                    provider_task_stats = task_agent_df.groupby(['llm_provider', 'status']).size().reset_index(name='count')
+                    fig = px.bar(
+                        provider_task_stats,
+                        x='llm_provider',
+                        y='count',
+                        color='status',
+                        title='Task Performance by LLM Provider',
+                        labels={'count': 'Number of Tasks', 'llm_provider': 'LLM Provider'}
+                    )
+                    provider_perf_chart = os.path.join(charts_dir, f"provider_performance_{timestamp}.html")
+                    fig.write_html(provider_perf_chart)
+                    chart_files.append(provider_perf_chart)
+                    
+                    # Task completion by agent type
+                    type_task_stats = task_agent_df.groupby(['agent_type', 'status']).size().reset_index(name='count')
+                    fig = px.bar(
+                        type_task_stats,
+                        x='agent_type',
+                        y='count',
+                        color='status',
+                        title='Task Performance by Agent Type',
+                        labels={'count': 'Number of Tasks', 'agent_type': 'Agent Type'}
+                    )
+                    type_perf_chart = os.path.join(charts_dir, f"agent_type_performance_{timestamp}.html")
+                    fig.write_html(type_perf_chart)
+                    chart_files.append(type_perf_chart)
         
-        # 3. Agent type distribution
+        # 3. Agent type distribution (enhanced)
         if self.agents_df is not None and not self.agents_df.empty:
             type_counts = self.agents_df['agent_type'].value_counts()
             fig = px.pie(
                 values=type_counts.values,
                 names=type_counts.index,
-                title='Agent Type Distribution'
+                title='Agent Type Distribution',
+                hole=0.4  # Donut chart for better visibility
             )
-            agent_type_chart = os.path.join(output_dir, f"agent_types_chart_{timestamp}.html")
+            agent_type_chart = os.path.join(charts_dir, f"agent_types_chart_{timestamp}.html")
             fig.write_html(agent_type_chart)
             chart_files.append(agent_type_chart)
         
-        # 4. Provider distribution
+        # 4. Enhanced Provider analytics
         if self.agents_df is not None and not self.agents_df.empty:
             provider_counts = self.agents_df['llm_provider'].value_counts()
             fig = px.bar(
                 x=provider_counts.index,
                 y=provider_counts.values,
                 title='LLM Provider Distribution',
-                labels={'x': 'Provider', 'y': 'Agent Count'}
+                labels={'x': 'Provider', 'y': 'Agent Count'},
+                color=provider_counts.values,
+                color_continuous_scale='viridis'
             )
-            provider_chart = os.path.join(output_dir, f"providers_chart_{timestamp}.html")
+            provider_chart = os.path.join(charts_dir, f"providers_chart_{timestamp}.html")
             fig.write_html(provider_chart)
             chart_files.append(provider_chart)
         
-        # 5. Task timeline if we have datetime data
+        # 5. Task timeline with agent context
         if self.tasks_df is not None and not self.tasks_df.empty and 'created_at' in self.tasks_df.columns:
-            fig = px.scatter(
-                self.tasks_df,
-                x='created_at',
-                y='id',
-                color='status',
-                title='Task Timeline',
-                labels={'created_at': 'Time', 'id': 'Task ID'}
+            if self.agents_df is not None and 'agent_id' in self.tasks_df.columns:
+                # Enhanced timeline with agent info
+                task_agent_df = self.tasks_df.merge(
+                    self.agents_df[['id', 'name', 'agent_type', 'llm_provider']], 
+                    left_on='agent_id', 
+                    right_on='id', 
+                    how='left',
+                    suffixes=('_task', '_agent')
+                )
+                
+                if not task_agent_df.empty:
+                    fig = px.scatter(
+                        task_agent_df,
+                        x='created_at',
+                        y='id_task',
+                        color='llm_provider',
+                        symbol='agent_type',
+                        title='Task Timeline by Provider and Agent Type',
+                        labels={'created_at': 'Time', 'id_task': 'Task ID'},
+                        hover_data=['name', 'status', 'task_type']
+                    )
+                    timeline_chart = os.path.join(charts_dir, f"task_timeline_enhanced_{timestamp}.html")
+                    fig.write_html(timeline_chart)
+                    chart_files.append(timeline_chart)
+            else:
+                # Basic timeline
+                fig = px.scatter(
+                    self.tasks_df,
+                    x='created_at',
+                    y='id',
+                    color='status',
+                    title='Task Timeline',
+                    labels={'created_at': 'Time', 'id': 'Task ID'}
+                )
+                timeline_chart = os.path.join(charts_dir, f"task_timeline_{timestamp}.html")
+                fig.write_html(timeline_chart)
+                chart_files.append(timeline_chart)
+        
+        # 6. Performance efficiency metrics
+        if hasattr(self, 'metrics_df') and self.metrics_df is not None and not self.metrics_df.empty:
+            # Metrics over time
+            metrics_over_time = self.metrics_df.melt(
+                id_vars=['scenario_id', 'created_at'],
+                value_vars=[col for col in self.metrics_df.columns if col.endswith('_score')],
+                var_name='metric_type',
+                value_name='score'
             )
-            timeline_chart = os.path.join(output_dir, f"task_timeline_{timestamp}.html")
-            fig.write_html(timeline_chart)
-            chart_files.append(timeline_chart)
+            
+            if not metrics_over_time.empty:
+                fig = px.line(
+                    metrics_over_time,
+                    x='created_at',
+                    y='score',
+                    color='metric_type',
+                    title='Performance Metrics Over Time',
+                    labels={'score': 'Score', 'created_at': 'Time'}
+                )
+                metrics_chart = os.path.join(charts_dir, f"performance_metrics_{timestamp}.html")
+                fig.write_html(metrics_chart)
+                chart_files.append(metrics_chart)
         
         return chart_files
 

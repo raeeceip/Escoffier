@@ -331,17 +331,27 @@ class EscoffierCLI:
             await self._ensure_initialized()
             
             # Parse recipe IDs
-            recipe_ids = [r.strip() for r in recipes.split(",")] if recipes else []
+            if isinstance(recipes, int):
+                # If recipes is a number, get that many recipe recommendations
+                recipe_count = recipes
+                recipe_ids = []
+            elif isinstance(recipes, str) and recipes:
+                # If recipes is a string, parse it as comma-separated IDs
+                recipe_ids = [r.strip() for r in recipes.split(",")]
+                recipe_count = len(recipe_ids)
+            else:
+                recipe_ids = []
+                recipe_count = 0
             
             # If no recipes specified, get some recommendations
-            if not recipe_ids:
+            if not recipe_ids and recipe_count > 0:
                 recommendations = self.recipe_manager.get_recipe_recommendations(
                     agent_skills=[],
                     available_ingredients=[],
                     time_limit=duration,
                     difficulty_preference=difficulty
                 )
-                recipe_ids = [rec['recipe_id'] for rec in recommendations[:3]]  # Use top 3
+                recipe_ids = [rec['recipe_id'] for rec in recommendations[:recipe_count]]
                 
             scenario_id = f"scenario_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
@@ -400,6 +410,31 @@ class EscoffierCLI:
                       f"{result.efficiency_score:.2f}")
                       
         self._run_async(_list())
+    
+    def list_options(self) -> None:
+        """List all available scenario types, agent types, and difficulty levels"""
+        from escoffier_types import ScenarioType, AgentType, DifficultyLevel, TaskType
+        
+        print("\n=== Available Scenario Types ===")
+        for scenario_type in ScenarioType:
+            print(f"  {scenario_type.value}")
+            
+        print("\n=== Available Agent Types ===")
+        for agent_type in AgentType:
+            print(f"  {agent_type.value}")
+            
+        print("\n=== Available Difficulty Levels ===")
+        for difficulty in DifficultyLevel:
+            print(f"  {difficulty.value}")
+            
+        print("\n=== Available Task Types ===")
+        for task_type in TaskType:
+            print(f"  {task_type.value}")
+            
+        print("\n=== Example Commands ===")
+        print("  python -m cli.main run_scenario cooking_competition --duration=5 --max_agents=3")
+        print("  python -m cli.main run_scenario service_rush --duration=10 --max_agents=4 --difficulty=hard")
+        print("  python -m cli.main run_scenario collaboration_test --duration=3 --max_agents=2")
         
     # Metrics and analysis commands
     def metrics(self, export_csv: bool = False, generate_charts: bool = False, output_dir: str = "data/analytics") -> None:

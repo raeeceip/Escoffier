@@ -10,6 +10,17 @@ class AgentType(Enum):
     SOUS_CHEF = "sous_chef"
     LINE_COOK = "line_cook"
     PREP_COOK = "prep_cook"
+    PASTRY_CHEF = "pastry_chef"
+    GRILL_COOK = "grill_cook"
+    SALAD_CHEF = "salad_chef"
+    EXPEDITER = "expediter"
+    DISHWASHER = "dishwasher"
+    KITCHEN_MANAGER = "kitchen_manager"
+    FOOD_RUNNER = "food_runner"
+    BAKER = "baker"
+    BUTCHER = "butcher"
+    GARDE_MANGER = "garde_manger"
+    SAUCE_CHEF = "sauce_chef"
 
 
 class AgentStatus(Enum):
@@ -30,6 +41,24 @@ class TaskType(Enum):
     COLLABORATE = "collaborate"
     DELEGATE = "delegate"
     QUALITY_CHECK = "quality_check"
+    INVENTORY = "inventory"
+    ORDER = "order"
+    SERVE = "serve"
+    EXPEDITE = "expedite"
+    GARNISH = "garnish"
+    SAUCE = "sauce"
+    GRILL = "grill"
+    BAKE = "bake"
+    FRY = "fry"
+    ROAST = "roast"
+    BRAISE = "braise"
+    SAUTE = "saute"
+    BLANCH = "blanch"
+    SEASON = "season"
+    TASTE = "taste"
+    TEMPERATURE_CHECK = "temperature_check"
+    SANITATION = "sanitation"
+    MISE_EN_PLACE = "mise_en_place"
 
 
 class TaskStatus(Enum):
@@ -60,6 +89,7 @@ class ActionType(Enum):
 class ScenarioType(Enum):
     """Types of scenarios"""
     COOKING_CHALLENGE = "cooking_challenge"
+    COOKING_COMPETITION = "cooking_competition"
     SERVICE_RUSH = "service_rush"
     EQUIPMENT_FAILURE = "equipment_failure"
     TIME_PRESSURE = "time_pressure"
@@ -67,6 +97,17 @@ class ScenarioType(Enum):
     SKILL_ASSESSMENT = "skill_assessment"
     CRISIS_MANAGEMENT = "crisis_management"
     RECIPE_DEVELOPMENT = "recipe_development"
+    MENU_PLANNING = "menu_planning"
+    INVENTORY_MANAGEMENT = "inventory_management"
+    QUALITY_CONTROL = "quality_control"
+    TRAINING_SESSION = "training_session"
+    CATERING_EVENT = "catering_event"
+    RESTAURANT_OPENING = "restaurant_opening"
+    FOOD_SAFETY_DRILL = "food_safety_drill"
+    SEASONAL_MENU = "seasonal_menu"
+    DIETARY_RESTRICTIONS = "dietary_restrictions"
+    COST_OPTIMIZATION = "cost_optimization"
+    CUSTOMER_COMPLAINTS = "customer_complaints"
 
 
 class ScenarioStatus(Enum):
@@ -80,9 +121,13 @@ class ScenarioStatus(Enum):
 
 class DifficultyLevel(Enum):
     """Recipe difficulty levels"""
+    BEGINNER = "beginner"
     EASY = "easy"
     MEDIUM = "medium"
+    INTERMEDIATE = "intermediate"
     HARD = "hard"
+    EXPERT = "expert"
+    MASTER = "master"
 
 
 class RecipeType(Enum):

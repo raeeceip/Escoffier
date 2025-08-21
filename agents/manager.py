@@ -279,7 +279,7 @@ Provide your prep action:"""
                 task_type=task_data['type'],
                 description=task_data['description'],
                 parameters=task_data.get('parameters', {}),
-                status=DBTaskStatus.PENDING,  # Use database TaskStatus enum
+                status=DBTaskStatus.PENDING.value,  # Use database TaskStatus enum value
                 priority=task_data.get('priority', 1),
                 estimated_duration=task_data.get('duration_minutes', 10)
             )

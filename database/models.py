@@ -214,7 +214,7 @@ class Task(Base):
     recipe_id = Column(Integer, ForeignKey('recipes.id'), nullable=True)
     
     # Execution details
-    status = Column(Enum(TaskStatus), default=TaskStatus.PENDING)
+    status = Column(String(20), default="pending")
     estimated_duration = Column(Integer, default=10)  # minutes
     actual_duration = Column(Integer, nullable=True)
     
@@ -238,7 +238,7 @@ class Task(Base):
     actions = relationship("AgentAction", back_populates="task")
     
     def __repr__(self) -> str:
-        return f"<Task(id={self.id}, type='{self.task_type}', status='{self.status.value}')>"
+        return f"<Task(id={self.id}, type='{self.task_type}', status='{self.status}')>"
 
 
 class AgentAction(Base):

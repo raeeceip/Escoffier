@@ -1,5 +1,6 @@
 """
 LLM Provider system with real API integrations for OpenAI, Anthropic, Cohere, and Hugging Face.
+Security hardened against deserialization and remote code execution vulnerabilities.
 """
 
 from abc import ABC, abstractmethod
@@ -8,6 +9,11 @@ import asyncio
 import logging
 from datetime import datetime
 import json
+import warnings
+import os
+
+# Security configuration
+from security_config import security_config
 
 # LLM Client libraries
 import openai
@@ -235,8 +241,15 @@ class HuggingFaceProvider(LLMProvider):
         self._load_model()
     
     def _load_model(self):
-        """Load the Hugging Face model."""
+        """Load the Hugging Face model with security hardening."""
         try:
+            # Security: Validate model name
+            if not security_config.validate_model_source(self.model_name):
+                raise ValueError(f"Untrusted model source: {self.model_name}")
+                
+            # Security: Sanitize cache directory
+            self.cache_dir = security_config.sanitize_model_path(self.cache_dir)
+            
             logger.info(f"Loading Hugging Face model: {self.model_name}")
             
             # Determine device
@@ -245,28 +258,35 @@ class HuggingFaceProvider(LLMProvider):
             else:
                 device = self.device
             
-            # Load tokenizer and pipeline
+            # Security: Get secure loading parameters
+            secure_kwargs = security_config.get_secure_transformers_kwargs()
+            
+            # Load tokenizer with security constraints
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
-                cache_dir=self.cache_dir
+                cache_dir=self.cache_dir,
+                **secure_kwargs
             )
             
             # Add pad token if not present
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
+            # Security: Create pipeline with restricted parameters
             self.pipeline = pipeline(
                 "text-generation",
                 model=self.model_name,
                 tokenizer=self.tokenizer,
                 device=device,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                **secure_kwargs  # Apply security constraints
             )
             
             logger.info(f"Hugging Face model loaded successfully on device: {device}")
             
         except Exception as e:
             logger.error(f"Failed to load Hugging Face model: {e}")
+            logger.error(f"This may be due to security restrictions or missing model files")
             self.pipeline = None
     
     async def generate_response(

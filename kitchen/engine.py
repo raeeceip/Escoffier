@@ -402,7 +402,7 @@ class KitchenEngine:
                             task_type="emergency_repair",
                             description=f"Emergency repair of {equipment.name}",
                             priority=10,  # Highest priority
-                            status=TaskStatus.PENDING,
+                            status=TaskStatus.PENDING.value,
                             estimated_duration=15,
                             parameters={"equipment": equipment.name, "location": station.location.value}
                         )
@@ -415,7 +415,7 @@ class KitchenEngine:
                     task_type="emergency_restock",
                     description="Emergency ingredient restocking",
                     priority=9,
-                    status=TaskStatus.PENDING,
+                    status=TaskStatus.PENDING.value,
                     estimated_duration=10,
                     parameters={"urgency": "high"}
                 )

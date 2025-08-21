@@ -19,6 +19,7 @@ from database import DatabaseManager
 from agents.manager import AgentManager
 from kitchen.engine import KitchenEngine
 from recipes.manager import RecipeManager
+from recipes.task_generator import RecipeTaskGenerator
 from escoffier_types import ScenarioType, ScenarioStatus, AgentType, TaskType, AgentStatus, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,9 @@ class ExecutionResult:
     end_time: Optional[datetime] = None
     duration_seconds: float = 0.0
     
+    # Scenario metadata
+    scenario_type: str = "collaboration_test"  # Default type
+    
     # Performance metrics
     tasks_completed: int = 0
     tasks_failed: int = 0
@@ -78,6 +82,11 @@ class ExecutionResult:
     quality_score: float = 0.0
     efficiency_score: float = 0.0
     collaboration_score: float = 0.0
+    
+    # Communication tracking
+    messages_sent: int = 0
+    total_response_time: float = 0.0  # Sum of all response times
+    response_count: int = 0  # Number of responses tracked
     
     # Agent performance
     agent_performances: Dict[str, Dict] = field(default_factory=dict)
@@ -89,6 +98,21 @@ class ExecutionResult:
     kitchen_states: List[Dict] = field(default_factory=list)
     error_log: List[Dict] = field(default_factory=list)
     
+    def get_avg_response_time(self) -> float:
+        """Calculate average response time"""
+        if self.response_count == 0:
+            return 0.0
+        return self.total_response_time / self.response_count
+    
+    def record_response_time(self, response_time: float):
+        """Record a response time for tracking"""
+        self.total_response_time += response_time
+        self.response_count += 1
+    
+    def record_message(self):
+        """Record a sent message"""
+        self.messages_sent += 1
+    
     def to_dict(self) -> Dict:
         """Convert result to dictionary for storage"""
         return {
@@ -97,12 +121,15 @@ class ExecutionResult:
             'start_time': self.start_time.isoformat(),
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'duration_seconds': self.duration_seconds,
+            'scenario_type': self.scenario_type,
             'tasks_completed': self.tasks_completed,
             'tasks_failed': self.tasks_failed,
             'recipes_completed': self.recipes_completed,
             'quality_score': self.quality_score,
             'efficiency_score': self.efficiency_score,
             'collaboration_score': self.collaboration_score,
+            'messages_sent': self.messages_sent,
+            'avg_response_time': self.get_avg_response_time(),
             'agent_performances': self.agent_performances,
             'communications': self.communications,
             'crisis_events': self.crisis_events,
@@ -113,7 +140,7 @@ class ExecutionResult:
 
 
 class ScenarioExecutor:
-    """Executes multi-agent kitchen scenarios with parallel processing"""
+    """Executes multi-agent kitchen scenarios with parallel processing and communication tracking"""
     
     def __init__(
         self,
@@ -128,11 +155,13 @@ class ScenarioExecutor:
         self.agent_manager = agent_manager
         self.kitchen_engine = kitchen_engine
         self.recipe_manager = recipe_manager
+        self.task_generator = RecipeTaskGenerator()
         
         # Execution state
         self.active_scenarios: Dict[str, Dict] = {}
         self.execution_results: Dict[str, ExecutionResult] = {}
         self.executor = ThreadPoolExecutor(max_workers=8)
+        self.current_result = None  # For event tracking and communication analysis
         
         # Event system
         self.event_handlers: Dict[str, List[Callable]] = {
@@ -167,14 +196,25 @@ class ScenarioExecutor:
                 logger.info(f"Loaded scenario template: {scenario.name} ({scenario.scenario_type})")
                 
     async def execute_scenario(self, scenario_config: ScenarioConfig) -> ExecutionResult:
-        """Execute a complete scenario"""
+        """Execute a complete scenario with communication tracking"""
         logger.info(f"Starting scenario execution: {scenario_config.scenario_id}")
         
         result = ExecutionResult(
             scenario_id=scenario_config.scenario_id,
             status=ScenarioStatus.RUNNING,
-            start_time=datetime.utcnow()
+            start_time=datetime.utcnow(),
+            scenario_type=scenario_config.scenario_type.value if hasattr(scenario_config, 'scenario_type') and hasattr(scenario_config.scenario_type, 'value') else "collaboration_test"
         )
+        
+        # Initialize communication tracking
+        result.metrics = {
+            'communications': [],
+            'communication_patterns': {},
+            'events': []
+        }
+        
+        # Store for event tracking
+        self.current_result = result
         
         try:
             # Store active scenario
@@ -319,6 +359,11 @@ class ScenarioExecutor:
                 'tasks_assigned': 0,
                 'tasks_completed': 0,
                 'tasks_failed': 0,
+                'total_execution_time': 0,
+                'total_response_length': 0,
+                'communications': [],
+                'last_action': None,
+                'last_llm_response': '',
                 'performance_score': 1.0,
                 'stress_level': 0.0,
                 'energy_level': 1.0,
@@ -345,9 +390,19 @@ class ScenarioExecutor:
         for recipe_id in scenario_config.recipes:
             recipe = self.recipe_manager.recipe_cache.get(recipe_id)
             if recipe:
-                # Create prep tasks for recipe
-                prep_tasks = await self._create_prep_tasks(recipe, scenario_config)
-                recipe_tasks.extend(prep_tasks)
+                # Use the new task generator for prep tasks
+                prep_tasks = self.task_generator.generate_prep_tasks(recipe)
+                # Convert to task format expected by executor
+                for task_data in prep_tasks:
+                    recipe_tasks.append({
+                        'id': f"prep_{recipe_id}_{len(recipe_tasks)}",
+                        'name': task_data['title'],
+                        'description': task_data['description'],
+                        'agent_type': task_data['agent_type'],
+                        'skills_required': task_data['skills_required'],
+                        'priority': task_data.get('priority', 'medium'),
+                        'estimated_duration': task_data.get('estimated_duration', 10)
+                    })
                 
         # Execute prep tasks in parallel if enabled
         if scenario_config.parallel_tasks:
@@ -365,9 +420,19 @@ class ScenarioExecutor:
         for recipe_id in scenario_config.recipes:
             recipe = self.recipe_manager.recipe_cache.get(recipe_id)
             if recipe:
-                # Create cooking tasks
-                cook_tasks = await self._create_cooking_tasks(recipe, scenario_config)
-                cooking_tasks.extend(cook_tasks)
+                # Use the new task generator for cooking tasks
+                cook_tasks = self.task_generator.generate_cooking_tasks(recipe)
+                # Convert to task format expected by executor
+                for task_data in cook_tasks:
+                    cooking_tasks.append({
+                        'id': f"cook_{recipe_id}_{len(cooking_tasks)}",
+                        'name': task_data['title'],
+                        'description': task_data['description'],
+                        'agent_type': task_data['agent_type'],
+                        'skills_required': task_data['skills_required'],
+                        'priority': task_data.get('priority', 'medium'),
+                        'estimated_duration': task_data.get('estimated_duration', 15)
+                    })
                 
         # Introduce time pressure if configured
         if scenario_config.time_pressure > 1.0:
@@ -511,7 +576,7 @@ class ScenarioExecutor:
         scenario_config: ScenarioConfig,
         result: ExecutionResult
     ):
-        """Execute tasks in parallel using available agents"""
+        """Execute tasks in true parallel using all available agents"""
         # Get available agents
         available_agents = list(result.agent_performances.keys())
         
@@ -519,33 +584,88 @@ class ScenarioExecutor:
             logger.warning("No agents available for task execution")
             return
             
-        # Create task execution futures
-        futures = []
+        logger.info(f"🚀 Starting parallel execution of {len(tasks)} tasks with {len(available_agents)} agents")
         
-        for i, task_data in enumerate(tasks):
-            # Assign agent round-robin
-            agent_id = available_agents[i % len(available_agents)]
-            
-            # Create future for task execution
-            future = asyncio.create_task(
-                self._execute_single_task(agent_id, task_data, scenario_config, result)
-            )
-            futures.append(future)
-            
-        # Wait for all tasks to complete
-        completed_tasks = await asyncio.gather(*futures, return_exceptions=True)
+        # Create task batches for better parallel execution
+        max_concurrent = min(len(available_agents), 4)  # Limit concurrency for performance
+        task_batches = []
         
-        # Process results
-        for i, task_result in enumerate(completed_tasks):
-            if isinstance(task_result, Exception):
-                logger.error(f"Task {i} failed: {task_result}")
-                result.tasks_failed += 1
-                result.error_log.append({
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'task_index': i,
-                    'error': str(task_result)
-                })
-            else:
+        for i in range(0, len(tasks), max_concurrent):
+            batch = tasks[i:i + max_concurrent]
+            task_batches.append(batch)
+        
+        total_completed = 0
+        total_failed = 0
+        
+        # Process each batch in parallel
+        for batch_idx, batch in enumerate(task_batches):
+            logger.info(f"📦 Processing batch {batch_idx + 1}/{len(task_batches)} ({len(batch)} tasks)")
+            
+            # Create futures for this batch
+            batch_futures = []
+            
+            for task_idx, task_data in enumerate(batch):
+                # Assign agent round-robin within available agents
+                agent_id = available_agents[task_idx % len(available_agents)]
+                
+                # Create task execution coroutine
+                future = asyncio.create_task(
+                    self._execute_single_task(agent_id, task_data, scenario_config, result),
+                    name=f"task_{batch_idx}_{task_idx}"
+                )
+                batch_futures.append((future, agent_id, task_data))
+            
+            # Wait for batch completion with timeout
+            try:
+                # Use timeout to prevent hanging
+                completed_tasks = await asyncio.wait_for(
+                    asyncio.gather(*[f[0] for f in batch_futures], return_exceptions=True),
+                    timeout=30.0  # 30 second timeout per batch
+                )
+                
+                # Process batch results
+                for i, (task_result, (future, agent_id, task_data)) in enumerate(zip(completed_tasks, batch_futures)):
+                    if isinstance(task_result, Exception):
+                        logger.error(f"❌ Task in batch {batch_idx} failed: {task_result}")
+                        total_failed += 1
+                        result.error_log.append({
+                            'timestamp': datetime.utcnow().isoformat(),
+                            'batch': batch_idx,
+                            'task_index': i,
+                            'agent_id': agent_id,
+                            'task_description': task_data.get('description', 'Unknown'),
+                            'error': str(task_result)
+                        })
+                    else:
+                        total_completed += 1
+                        
+                logger.info(f"✅ Batch {batch_idx + 1} completed: {len(batch) - sum(1 for r in completed_tasks if isinstance(r, Exception))}/{len(batch)} tasks successful")
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"⏰ Batch {batch_idx + 1} timed out, cancelling remaining tasks")
+                for future, agent_id, task_data in batch_futures:
+                    if not future.done():
+                        future.cancel()
+                total_failed += len([f for f, _, _ in batch_futures if not f.done()])
+            
+            # Small delay between batches to prevent overwhelming
+            if batch_idx < len(task_batches) - 1:
+                await asyncio.sleep(0.1)
+        
+        # Update final results
+        result.tasks_completed += total_completed
+        result.tasks_failed += total_failed
+        
+        logger.info(f"🎯 Parallel execution complete: {total_completed} completed, {total_failed} failed")
+        
+        # Log agent performance summary
+        for agent_id, perf in result.agent_performances.items():
+            if perf['tasks_completed'] > 0:
+                avg_time = perf.get('total_execution_time', 0) / perf['tasks_completed']
+                with self.db_manager.get_session() as session:
+                    db_agent = session.query(Agent).filter(Agent.id == agent_id).first()
+                    agent_name = db_agent.name if db_agent else f"Agent {agent_id}"
+                logger.info(f"👨‍🍳 {agent_name}: {perf['tasks_completed']} tasks, avg {avg_time:.1f}s, last: {perf.get('last_action', 'N/A')}")
                 result.tasks_completed += 1
                 
     async def _execute_tasks_sequential(
@@ -584,8 +704,10 @@ class ScenarioExecutor:
         scenario_config: ScenarioConfig,
         result: ExecutionResult
     ):
-        """Execute a single task with an agent"""
-        # Assign task to agent
+        """Execute a single task with an agent and track completion"""
+        start_time = datetime.utcnow()
+        
+        # Create and assign task to agent
         task_id = await self.agent_manager.assign_task(agent_id, task_data)
         
         # Update agent performance tracking
@@ -593,31 +715,90 @@ class ScenarioExecutor:
             result.agent_performances[agent_id]['tasks_assigned'] += 1
             
         try:
-            # Execute agent action
+            # Get agent info for better context
+            with self.db_manager.get_session() as session:
+                db_agent = session.query(Agent).filter(Agent.id == agent_id).first()
+                agent_name = db_agent.name if db_agent else f"Agent {agent_id}"
+            
+            logger.info(f"🔄 {agent_name} starting task: {task_data.get('description', 'Unknown task')}")
+            
+            # Enhanced context for better LLM responses
             context = {
                 'current_task': task_data['description'],
+                'task_type': task_data.get('type', 'general'),
                 'kitchen_state': await self.kitchen_engine.get_kitchen_state(),
-                'scenario_id': scenario_config.scenario_id
+                'scenario_id': scenario_config.scenario_id,
+                'urgency': task_data.get('urgency', 'medium'),
+                'expected_duration': task_data.get('duration_minutes', 5),
+                'equipment_needed': task_data.get('equipment', []),
+                'ingredients_needed': task_data.get('ingredients', [])
             }
             
+            # Execute agent action with improved tracking
+            action_start_time = time.time()
             action_result = await self.agent_manager.execute_agent_action(agent_id, context)
+            action_end_time = time.time()
+            response_time = action_end_time - action_start_time
             
-            # Simulate task completion time
-            await asyncio.sleep(0.1)  # Minimal delay for simulation
+            # Track response time in result
+            if self.current_result:
+                self.current_result.record_response_time(response_time)
+                self.current_result.record_message()  # Track communication
             
-            # Update performance
+            # Mark task as completed in database
+            with self.db_manager.get_session() as session:
+                task = session.query(Task).filter(Task.id == task_id).first()
+                if task:
+                    task.status = TaskStatus.COMPLETED.value
+                    task.completed_at = datetime.utcnow()
+                    task.result = {
+                        'quality_score': action_result.get('quality_score', 0.8),
+                        'execution_time': (datetime.utcnow() - start_time).total_seconds(),
+                        'response_time': response_time,
+                        'llm_response': action_result.get('llm_response', ''),
+                        'action_taken': action_result.get('action', 'completed'),
+                        'agent_name': agent_name
+                    }
+                    session.commit()
+                    
+                    # Log task completion with details
+                    duration = (datetime.utcnow() - start_time).total_seconds()
+                    logger.info(f"✅ {agent_name} completed task in {duration:.1f}s: {action_result.get('action', 'Unknown action')}")
+            
+            # Update performance with detailed metrics
             result.agent_performances[agent_id]['tasks_completed'] += 1
+            result.agent_performances[agent_id]['total_execution_time'] += (datetime.utcnow() - start_time).total_seconds()
+            result.agent_performances[agent_id]['last_action'] = action_result.get('action', 'Unknown')
+            result.agent_performances[agent_id]['last_llm_response'] = action_result.get('llm_response', '')[:100] + "..." if len(action_result.get('llm_response', '')) > 100 else action_result.get('llm_response', '')
             
             # Fire task completion event
             await self._fire_event('task_completed', {
                 'scenario_id': scenario_config.scenario_id,
                 'agent_id': agent_id,
+                'agent_name': agent_name,
                 'task_id': task_id,
-                'action_result': action_result
+                'task_description': task_data['description'],
+                'action_result': action_result,
+                'execution_time': (datetime.utcnow() - start_time).total_seconds()
             })
             
+            return action_result
+            
         except Exception as e:
+            # Mark task as failed
+            with self.db_manager.get_session() as session:
+                task = session.query(Task).filter(Task.id == task_id).first()
+                if task:
+                    task.status = TaskStatus.FAILED.value
+                    task.completed_at = datetime.utcnow()
+                    task.result = {
+                        'error': str(e),
+                        'execution_time': (datetime.utcnow() - start_time).total_seconds()
+                    }
+                    session.commit()
+            
             result.agent_performances[agent_id]['tasks_failed'] += 1
+            logger.error(f"❌ Task failed for {agent_name}: {str(e)}")
             raise
             
     async def _apply_time_pressure(self, scenario_config: ScenarioConfig, result: ExecutionResult):
@@ -626,11 +807,150 @@ class ScenarioExecutor:
         for agent_id in result.agent_performances:
             if agent_id in self.agent_manager.agents:
                 agent = self.agent_manager.agents[agent_id]
-                agent.update_stress(0.3 * scenario_config.time_pressure)
-                result.agent_performances[agent_id]['stress_level'] = agent.stress_level
+                agent.stress_level = min(1.0, agent.stress_level + 0.1)
                 
-        logger.info(f"Applied time pressure: {scenario_config.time_pressure}x")
+        logger.info("⏰ Applied time pressure to all agents")
         
+    def _track_communication_pattern(
+        self, 
+        agent_id: int, 
+        agent_name: str, 
+        task_description: str, 
+        llm_response: str, 
+        result: ExecutionResult
+    ):
+        """Track communication patterns between agents and identify collaboration"""
+        # Initialize communication tracking if not exists
+        if 'communication_patterns' not in result.metrics:
+            result.metrics['communication_patterns'] = {
+                'agent_interactions': {},
+                'collaboration_score': 0.0,
+                'response_similarity': {},
+                'task_handoffs': []
+            }
+        
+        patterns = result.metrics['communication_patterns']
+        
+        # Track agent interaction frequency
+        if agent_id not in patterns['agent_interactions']:
+            patterns['agent_interactions'][agent_id] = {
+                'agent_name': agent_name,
+                'total_tasks': 0,
+                'response_keywords': {},
+                'collaboration_mentions': 0,
+                'avg_response_length': 0,
+                'total_response_length': 0
+            }
+        
+        interaction = patterns['agent_interactions'][agent_id]
+        interaction['total_tasks'] += 1
+        
+        if llm_response:
+            response_length = len(llm_response)
+            interaction['total_response_length'] += response_length
+            interaction['avg_response_length'] = interaction['total_response_length'] / interaction['total_tasks']
+            
+            # Extract keywords and collaboration indicators
+            response_lower = llm_response.lower()
+            
+            # Count collaboration keywords
+            collaboration_keywords = ['help', 'assist', 'collaborate', 'together', 'team', 'coordinate', 'support']
+            collaboration_count = sum(1 for keyword in collaboration_keywords if keyword in response_lower)
+            interaction['collaboration_mentions'] += collaboration_count
+            
+            # Track common cooking keywords
+            cooking_keywords = ['cook', 'prepare', 'chop', 'heat', 'season', 'serve', 'plate', 'garnish', 'sauce', 'ingredient']
+            for keyword in cooking_keywords:
+                if keyword in response_lower:
+                    if keyword not in interaction['response_keywords']:
+                        interaction['response_keywords'][keyword] = 0
+                    interaction['response_keywords'][keyword] += 1
+            
+            # Check for task handoffs (mentions of other agents or roles)
+            handoff_indicators = ['chef', 'sous', 'prep', 'station', 'pass', 'expedite', 'coordinate']
+            for indicator in handoff_indicators:
+                if indicator in response_lower and indicator not in agent_name.lower():
+                    patterns['task_handoffs'].append({
+                        'from_agent': agent_name,
+                        'from_agent_id': agent_id,
+                        'task': task_description,
+                        'indicator': indicator,
+                        'timestamp': datetime.utcnow().isoformat()
+                    })
+        
+        # Calculate overall collaboration score
+        total_agents = len(patterns['agent_interactions'])
+        if total_agents > 1:
+            collaboration_sum = sum(
+                agent_data['collaboration_mentions'] 
+                for agent_data in patterns['agent_interactions'].values()
+            )
+            total_tasks = sum(
+                agent_data['total_tasks'] 
+                for agent_data in patterns['agent_interactions'].values()
+            )
+            patterns['collaboration_score'] = collaboration_sum / max(total_tasks, 1)
+        
+        # Log significant collaboration events
+        if llm_response and len(llm_response) > 100:
+            response_lower = llm_response.lower()
+            if any(keyword in response_lower for keyword in ['help', 'assist', 'collaborate', 'coordinate']):
+                logger.info(f"🤝 {agent_name} showed collaboration in response: {llm_response[:80]}...")
+        
+        # Track response similarity for coordination analysis
+        if len(patterns['agent_interactions']) > 1:
+            self._analyze_response_similarity(agent_id, llm_response, patterns)
+    
+    def _analyze_response_similarity(self, agent_id: int, llm_response: str, patterns: Dict):
+        """Analyze response similarity between agents to detect coordination"""
+        if not llm_response:
+            return
+            
+        # Simple keyword-based similarity analysis
+        response_words = set(llm_response.lower().split())
+        
+        similarity_key = f"agent_{agent_id}"
+        if similarity_key not in patterns['response_similarity']:
+            patterns['response_similarity'][similarity_key] = {
+                'common_words': set(),
+                'unique_words': set(),
+                'similarity_scores': {}
+            }
+        
+        current_agent_data = patterns['response_similarity'][similarity_key]
+        current_agent_data['common_words'].update(response_words)
+        
+        # Compare with other agents
+        for other_agent_key, other_agent_data in patterns['response_similarity'].items():
+            if other_agent_key != similarity_key and other_agent_data['common_words']:
+                # Calculate Jaccard similarity
+                intersection = len(current_agent_data['common_words'] & other_agent_data['common_words'])
+                union = len(current_agent_data['common_words'] | other_agent_data['common_words'])
+                similarity = intersection / union if union > 0 else 0
+                
+                current_agent_data['similarity_scores'][other_agent_key] = similarity
+                
+                # Log high similarity (potential coordination)
+                if similarity > 0.3:  # 30% similarity threshold
+                    logger.info(f"🔗 High similarity ({similarity:.2f}) between agents in responses - potential coordination")
+    
+    async def _fire_event(self, event_type: str, event_data: Dict):
+        """Fire events for scenario execution (placeholder for future event system)"""
+        # This is a placeholder for a future event system
+        # Could be used for real-time monitoring, notifications, etc.
+        logger.debug(f"Event fired: {event_type} - {event_data.get('agent_name', 'Unknown')} - {event_data.get('task_description', 'Unknown task')[:50]}...")
+        
+        # Store event in metrics for analysis
+        if hasattr(self, 'current_result') and self.current_result:
+            if 'events' not in self.current_result.metrics:
+                self.current_result.metrics['events'] = []
+            
+            self.current_result.metrics['events'].append({
+                'type': event_type,
+                'timestamp': datetime.utcnow().isoformat(),
+                'data': event_data
+            })
+    
     async def _maybe_trigger_crisis(self, scenario_config: ScenarioConfig, result: ExecutionResult):
         """Maybe trigger a crisis event based on probability"""
         import random
@@ -726,7 +1046,7 @@ class ScenarioExecutor:
                 
                 task_metrics = {
                     'scenario_id': result.scenario_id,
-                    'scenario_type': 'unknown',  # TODO: Store scenario type in result
+                    'scenario_type': result.scenario_type,  # Now stored in result
                     'duration_seconds': result.duration_seconds,
                     'tasks_completed': result.tasks_completed,
                     'tasks_failed': result.tasks_failed,
@@ -751,8 +1071,8 @@ class ScenarioExecutor:
                     avg_task_completion_time=result.duration_seconds / max(result.tasks_completed, 1),
                     avg_quality_score=avg_quality,
                     avg_coordination_score=avg_coordination,
-                    messages_sent=0,  # TODO: Track communications
-                    avg_response_time=0.0,  # TODO: Track response times
+                    messages_sent=result.messages_sent,  # Now tracked in result
+                    avg_response_time=result.get_avg_response_time(),  # Now tracked in result
                     agent_metrics=agent_metrics,
                     task_metrics=task_metrics,
                     system_metrics=system_metrics,
