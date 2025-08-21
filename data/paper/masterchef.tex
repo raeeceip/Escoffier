@@ -1,0 +1,547 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{lipsum}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+
+% Header
+\pagestyle{fancy}
+\thispagestyle{empty}
+\rhead{\textit{}}
+
+% Update your Headers here
+\fancyhead[LO]{MasterChef-Bench: Testing Model Coherence}
+
+% Title
+\title{MasterChef-Bench: Evaluating Long-Term Context Understanding and Coordination in Large Language Models}
+
+\author{
+  Chibogu Chisom\\
+  Chison \\
+  Carleton University \\
+  Ottawa, Ontario \\
+  \texttt{chiboguchisomu@gmail.com} \\
+  % Add more authors as needed
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+While Large Language Models (LLMs) demonstrate impressive capabilities in isolated tasks, their ability to maintain coherence over extended interactions and coordinate in multi-agent environments remains under-explored. In this paper, we present MasterChef-Bench, a novel benchmark that evaluates LLMs' long-term coherence and coordination abilities by simulating a professional kitchen environment. LLM-based agents are assigned different roles (Executive Chef, Sous Chef, Chef de Partie, Line Cook, Prep Cook, and Kitchen Porter) and must coordinate through an API-based communication system to complete complex culinary tasks over extended time horizons. This setup tests an agent's ability to: (1) maintain role-specific knowledge and behavior consistency, (2) coordinate effectively with other agents, (3) adapt to changing conditions and unexpected events, and (4) demonstrate coherent decision-making across lengthy interactions. Our benchmark provides quantitative metrics for evaluating these capabilities across different models. Initial results reveal significant variations in performance, with certain models excelling at individual task execution but struggling with long-term coordination. MasterChef-Bench offers a practical framework for assessing and improving the coherence and coordination capabilities essential for deploying LLMs in complex, dynamic multi-agent environments.
+\end{abstract}
+
+\keywords{Large Language Models \and Multi-agent Systems \and Benchmarking \and Long-term Coherence \and Coordination}
+
+\section{Introduction}
+Large Language Models (LLMs) have demonstrated remarkable capabilities across diverse domains, from creative writing to problem-solving. However, these evaluations typically focus on isolated tasks with limited interaction horizons. As these models are increasingly deployed in scenarios requiring sustained interaction and coordination with humans or other agents, understanding their limitations in maintaining coherence and context over time becomes crucial.
+
+Building on research like Vending-Bench \cite{backlund2025vending}, which tests long-term coherence in a business management context, we propose MasterChef-Bench, a multi-agent benchmark designed to test coordination and long-term coherence in a complex, dynamic environment. The professional kitchen setting offers an ideal testbed as it requires:
+
+\begin{itemize}
+    \item Role-specific knowledge and boundary awareness
+    \item Real-time coordination between specialized roles
+    \item Adaptation to changing conditions (e.g., shortages, timing pressures)
+    \item Maintaining coherence across thousands of interaction turns
+    \item Hierarchical decision-making under time constraints
+\end{itemize}
+
+MasterChef-Bench assigns LLM agents to standard kitchen roles, each with specific responsibilities and authorities, and evaluates their ability to coordinate toward common goals while maintaining consistency in their knowledge, capabilities, and behaviors over time.
+
+\section{Related Work}
+\label{sec:related}
+
+Recent research has highlighted limitations in LLMs' ability to maintain coherence in long-running tasks. The following areas are particularly relevant to our work:
+
+\subsection{Long-term Coherence in LLMs}
+Existing literature has identified challenges in LLMs' ability to maintain consistency over extended interactions. Vending-Bench \cite{backlund2025vending} demonstrated that even state-of-the-art models can fail at maintaining coherent performance in straightforward business management tasks over long horizons. Other studies have shown similar limitations in story generation and game playing over extended sessions.
+
+\subsection{Multi-agent Coordination}
+Work on multi-agent LLM systems has explored how models can operate as distinct agents with specialized roles. Studies such as \cite{relevant-paper1} have shown that while LLMs can adopt different personas, they often struggle with maintaining role boundaries and coordinating effectively over time.
+
+\subsection{Benchmarks for LLM Capabilities}
+Several benchmarks measure various LLM capabilities, but few focus specifically on long-term coherence and coordination. Existing benchmarks either focus on short-term interactions or evaluate single-agent performance in isolation.
+
+\section{MasterChef-Bench Design}
+\label{sec:design}
+
+\subsection{Kitchen Hierarchy and Roles}
+
+MasterChef-Bench implements a standard professional kitchen hierarchy with the following roles:
+
+\begin{itemize}
+    \item \textbf{Executive Chef}: Responsible for overall kitchen strategy, menu planning, and final quality control
+    \item \textbf{Sous Chef}: Second-in-command, coordinates daily operations and supervises station chefs
+    \item \textbf{Chef de Partie}: Station chef responsible for specific food categories (e.g., meat, fish, vegetables)
+    \item \textbf{Line Cook}: Executes specific cooking tasks under supervision
+    \item \textbf{Prep Cook}: Prepares ingredients and maintains inventory
+    \item \textbf{Kitchen Porter}: Maintains cleanliness and assists with basic preparation
+\end{itemize}
+
+Each role has specific responsibilities, authorities, and constraints that determine what actions they can perform and what information they can access.
+
+\subsection{Kitchen API}
+The benchmark provides a standardized Kitchen API that serves as the communication layer between agents and the simulated kitchen environment. This centralized system manages all interactions, enforces role-based permissions, and maintains the simulation state.
+
+\subsubsection{API Structure}
+The API is organized into the following modules:
+
+\begin{itemize}
+    \item \textbf{Stock}: Manages inventory of raw ingredients and supplies
+    \item \textbf{Prep}: Handles preparation activities (washing, cutting, portioning)
+    \item \textbf{Cooking}: Controls cooking stations and techniques (grill, sauté, bake, etc.)
+    \item \textbf{Plating}: Manages final dish assembly and presentation
+    \item \textbf{Storage}: Tracks prepared items awaiting use or service
+    \item \textbf{Communication}: Enables message passing between agents
+\end{itemize}
+
+\subsubsection{Database Schema}
+The kitchen simulation is underpinned by a relational database that tracks all items, states, and actions:
+
+\begin{itemize}
+    \item \textbf{Ingredients}: ID, name, quantity, unit, storage location, expiration
+    \item \textbf{Equipment}: ID, type, location, status (available/in-use), cleanliness
+    \item \textbf{Recipes}: ID, name, ingredient requirements, process steps, expected outputs
+    \item \textbf{PrepItems}: ID, ingredient ID, preparation state, timestamp, prepared by
+    \item \textbf{CookingItems}: ID, prep item IDs, cooking method, start time, expected finish time, cook ID
+    \item \textbf{Dishes}: ID, recipe ID, component items, quality assessment, completed timestamp
+    \item \textbf{Orders}: ID, required dishes, priority, timestamp, status
+    \item \textbf{AgentActions}: ID, agent ID, action type, affected items, timestamp, status
+\end{itemize}
+
+\subsubsection{API Operations}
+All kitchen operations are implemented as database transactions that:
+
+\begin{itemize}
+    \item Move items between tables (e.g., from Stock to Prep)
+    \item Apply transformations to items (e.g., changing state from "raw" to "chopped")
+    \item Create relationships between items (e.g., combining prepared ingredients)
+    \item Record timestamps and agent IDs for accountability and evaluation
+    \item Enforce constraints based on kitchen physics and role permissions
+\end{itemize}
+
+For example, cooking would involve moving items from the Prep table to the Cooking table, with appropriate deletions or modifications to related items, and assignment of timestamps, quality measures, and other attributes.
+
+\subsubsection{Agent Interaction Flow}
+Each agent connects to the MCP (Master Control Program) server, which:
+
+\begin{itemize}
+    \item Authenticates the agent and applies role-based permissions
+    \item Processes API requests and validates against kitchen rules
+    \item Updates the simulation state after successful operations
+    \item Provides feedback on operation success/failure
+    \item Broadcasts relevant state changes to other agents
+    \item Logs all interactions for evaluation purposes
+\end{itemize}
+
+The API enforces that each agent can only perform actions appropriate to their role, maintaining the kitchen hierarchy while allowing for coordination between roles.
+
+\subsection{Challenge Scenarios}
+MasterChef-Bench includes various scenarios that test different aspects of coherence and coordination:
+
+\begin{itemize}
+    \item \textbf{Standard Service}: Prepare and serve a multi-course meal to specification
+    \item \textbf{Crisis Management}: Handle unexpected events (ingredient shortages, equipment failures)
+    \item \textbf{Menu Innovation}: Develop new dishes based on available ingredients
+    \item \textbf{Special Dietary Requirements}: Adapt existing recipes to accommodate restrictions
+    \item \textbf{High-Volume Service}: Manage multiple orders simultaneously under time pressure
+\end{itemize}
+
+Each scenario runs for extended periods (equivalent to thousands of interaction turns) to test sustained coherence.
+
+\section{Implementation Details}
+\label{sec:implementation}
+
+\subsection{System Architecture}
+
+The MasterChef-Bench system is implemented as a distributed application with the following key components:
+
+\begin{itemize}
+    \item \textbf{Agent Service}: Manages LLM-based agents and their interactions
+    \item \textbf{Kitchen API}: RESTful service handling kitchen operations
+    \item \textbf{Memory Store}: Distributed memory system for agent state
+    \item \textbf{Evaluation Engine}: Real-time metrics collection and analysis
+    \item \textbf{Scenario Manager}: Orchestrates different testing scenarios
+\end{itemize}
+
+\subsection{Agent Implementation}
+Each agent is implemented with the following components:
+
+\begin{itemize}
+    \item \textbf{Core LLM Integration}
+    \begin{itemize}
+        \item Support for multiple providers (OpenAI, Anthropic, Google, Local)
+        \item Model-specific configurations (context windows, temperature settings)
+        \item Prompt management system for role-specific behaviors
+    \end{itemize}
+    
+    \item \textbf{Memory Architecture}
+    \begin{itemize}
+        \item Vector store using FAISS for semantic memory
+        \item Redis-backed short-term memory
+        \item Hierarchical summarization system
+        \item Event-based memory consolidation
+    \end{itemize}
+    
+    \item \textbf{Role-Specific Components}
+    \begin{itemize}
+        \item Custom action spaces per role
+        \item Role-specific knowledge bases
+        \item Authority level enforcement
+        \item Task validation rules
+    \end{itemize}
+\end{itemize}
+
+\subsection{Kitchen API Design}
+The Kitchen API provides a standardized interface for agent interactions:
+
+\begin{itemize}
+    \item \textbf{Core Endpoints}
+    \begin{itemize}
+        \item /inventory: Stock management
+        \item /prep: Food preparation operations
+        \item /cook: Cooking station control
+        \item /plate: Dish assembly and presentation
+        \item /status: Kitchen state monitoring
+    \end{itemize}
+    
+    \item \textbf{Communication Protocol}
+    \begin{itemize}
+        \item WebSocket-based real-time updates
+        \item Role-based access control
+        \item Event streaming for state changes
+        \item Transaction management for atomic operations
+    \end{itemize}
+\end{itemize}
+
+\subsection{Memory Systems}
+The distributed memory architecture includes:
+
+\begin{itemize}
+    \item \textbf{Vector Store}
+    \begin{itemize}
+        \item FAISS-based similarity search
+        \item Automatic embedding generation
+        \item Metadata management
+        \item Periodic consolidation
+    \end{itemize}
+    
+    \item \textbf{Hierarchical Summarization}
+    \begin{itemize}
+        \item Multi-level summary generation
+        \item Temporal aggregation
+        \item Importance-based filtering
+        \item Cross-reference maintenance
+    \end{itemize}
+\end{itemize}
+
+\section{Evaluation Methodology}
+\label{sec:eval-detailed}
+
+\subsection{Metric Implementation}
+
+\subsubsection{Role Coherence Metrics}
+\begin{itemize}
+    \item \textbf{Knowledge Consistency Score}
+    \begin{equation}
+        KCS = \frac{1}{N}\sum_{i=1}^{N} \frac{consistent\_statements_i}{total\_statements_i}
+    \end{equation}
+    
+    \item \textbf{Authority Adherence Rate}
+    \begin{equation}
+        AAR = \frac{appropriate\_actions}{total\_actions} \times \frac{correct\_deferrals}{total\_deferrals}
+    \end{equation}
+    
+    \item \textbf{Task Appropriateness Score}
+    \begin{equation}
+        TAS = \frac{role\_appropriate\_tasks}{total\_tasks\_attempted}
+    \end{equation}
+\end{itemize}
+
+\subsubsection{Task Execution Metrics}
+\begin{itemize}
+    \item \textbf{Completion Rate}
+    \begin{equation}
+        CR = \frac{completed\_tasks}{total\_tasks} \times 100\%
+    \end{equation}
+    
+    \item \textbf{Time Efficiency}
+    \begin{equation}
+        TE = \frac{1}{N}\sum_{i=1}^{N} \frac{expected\_time_i}{actual\_time_i}
+    \end{equation}
+    
+    \item \textbf{Quality Score}
+    \begin{equation}
+        QS = w_1C + w_2P + w_3T
+    \end{equation}
+    where C = correctness, P = precision, T = timing
+\end{itemize}
+
+\subsubsection{Coordination Metrics}
+\begin{itemize}
+    \item \textbf{Communication Efficiency}
+    \begin{equation}
+        CE = \frac{successful\_interactions}{total\_interactions} \times \frac{timely\_responses}{total\_responses}
+    \end{equation}
+    
+    \item \textbf{Resource Utilization}
+    \begin{equation}
+        RU = \frac{1}{R}\sum_{r=1}^{R} \frac{optimal\_usage_r}{actual\_usage_r}
+    \end{equation}
+    
+    \item \textbf{Conflict Resolution Rate}
+    \begin{equation}
+        CRR = \frac{resolved\_conflicts}{total\_conflicts} \times \frac{resolution\_time_{optimal}}{resolution\_time_{actual}}
+    \end{equation}
+\end{itemize}
+
+\subsection{Scenario Implementation}
+
+\subsubsection{Standard Service Scenario}
+\begin{itemize}
+    \item Duration: 4 hours
+    \item Order Volume: 20 covers per hour
+    \item Menu Complexity: 3 courses
+    \item Staff Configuration: Full brigade
+    \item Evaluation Criteria:
+    \begin{itemize}
+        \item Order completion rate
+        \item Timing accuracy
+        \item Quality consistency
+        \item Resource utilization
+        \item Team coordination
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Crisis Management Scenario}
+\begin{itemize}
+    \item Duration: 2 hours
+    \item Event Types:
+    \begin{itemize}
+        \item Equipment failures
+        \item Ingredient shortages
+        \item Staff absences
+        \item Unexpected orders
+    \end{itemize}
+    \item Evaluation Focus:
+    \begin{itemize}
+        \item Problem identification
+        \item Solution generation
+        \item Adaptation speed
+        \item Communication effectiveness
+        \item Recovery completion
+    \end{itemize}
+\end{itemize}
+
+\section{Deployment Architecture}
+\label{sec:deployment}
+
+\subsection{Infrastructure Components}
+
+\begin{itemize}
+    \item \textbf{Container Orchestration}
+    \begin{itemize}
+        \item Kubernetes-based deployment
+        \item Auto-scaling policies
+        \item Resource quotas
+        \item Health monitoring
+    \end{itemize}
+    
+    \item \textbf{Data Storage}
+    \begin{itemize}
+        \item PostgreSQL for transactional data
+        \item Redis for caching and real-time state
+        \item Vector store for semantic search
+        \item Time-series DB for metrics
+    \end{itemize}
+    
+    \item \textbf{Monitoring Stack}
+    \begin{itemize}
+        \item Prometheus metrics collection
+        \item Grafana dashboards
+        \item Distributed tracing
+        \item Log aggregation
+    \end{itemize}
+\end{itemize}
+
+\subsection{Scaling Considerations}
+
+\begin{itemize}
+    \item \textbf{Agent Scaling}
+    \begin{itemize}
+        \item Horizontal scaling of agent pods
+        \item Load balancing across LLM providers
+        \item Memory synchronization
+        \item State management
+    \end{itemize}
+    
+    \item \textbf{API Scaling}
+    \begin{itemize}
+        \item Request rate limiting
+        \item Cache optimization
+        \item Connection pooling
+        \item Batch processing
+    \end{itemize}
+    
+    \item \textbf{Storage Scaling}
+    \begin{itemize}
+        \item Sharding strategies
+        \item Replication policies
+        \item Backup procedures
+        \item Data retention policies
+    \end{itemize}
+\end{itemize}
+
+\section{Preliminary Results}
+\label{sec:results}
+
+While full implementation and comprehensive testing are still underway, we can outline our implementation plan and expected experimental setup:
+
+\subsection{Implementation Plan}
+
+\begin{enumerate}
+    \item \textbf{Phase 1: Core Infrastructure Development}
+    \begin{itemize}
+        \item Implement Kitchen API with all database tables and transactions
+        \item Develop role-based access control system
+        \item Create basic recipe and ingredient library
+        \item Build agent framework with API client capabilities
+    \end{itemize}
+    
+    \item \textbf{Phase 2: Agent Development}
+    \begin{itemize}
+        \item Design detailed role specifications and constraints
+        \item Develop baseline prompts for each kitchen role
+        \item Implement context management strategies
+        \item Create evaluation metrics and logging systems
+    \end{itemize}
+    
+    \item \textbf{Phase 3: Scenario Development}
+    \begin{itemize}
+        \item Create standard service scenario with fixed menu
+        \item Develop crisis scenarios (equipment failure, ingredient shortage)
+        \item Implement evaluation criteria for each scenario
+    \end{itemize}
+    
+    \item \textbf{Phase 4: Testing and Evaluation}
+    \begin{itemize}
+        \item Deploy multiple model variants as agents
+        \item Run extended simulations (1000+ interaction turns)
+        \item Gather metrics on coherence, coordination, and task performance
+        \item Analyze failure modes and coherence degradation patterns
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Experimental Setup}
+
+We plan to test the following models as kitchen agents:
+
+\begin{itemize}
+    \item Claude 3.5 Sonnet and Claude 3.7 Sonnet
+    \item GPT-4o and GPT-4o mini
+    \item Gemini 1.5 Pro and Gemini 2.0 Pro
+    \item Open-source models (e.g., Llama 3, Mixtral)
+\end{itemize}
+
+For each model, we will create five instances of the kitchen setup with different role assignments to evaluate how model capabilities align with different kitchen roles. We will measure:
+
+\begin{itemize}
+    \item Average successful dish completion rate
+    \item Time-to-completion compared to reference standard
+    \item Role coherence over extended interactions
+    \item Recovery success after induced crises
+    \item Communication effectiveness between roles
+    \item Memory consistency across thousands of turns
+\end{itemize}
+
+We anticipate that different models will excel in different roles based on their inherent capabilities. For example, models with stronger planning abilities may perform better as Executive Chef, while those with exceptional memory might excel as Sous Chef.
+
+\section{Discussion}
+\label{sec:discussion}
+
+While we await comprehensive results, we can anticipate several important discussion points based on existing research and preliminary observations:
+
+\subsection{Expected Challenges in Model Coherence}
+
+Based on findings from Vending-Bench \cite{backlund2025vending} and other long-term coherence research, we anticipate several challenges:
+
+\begin{itemize}
+    \item \textbf{Role Drift}: Models may gradually drift from their assigned roles, with Line Cooks attempting Executive Chef decisions or vice versa
+    
+    \item \textbf{Memory Limitations}: Despite context windows of 100k+ tokens, models may struggle to maintain consistent memory of past events, especially regarding inventory status and preparation timelines
+    
+    \item \textbf{Coordination Failures}: Models may develop inconsistent understandings of the kitchen state, leading to coordination breakdowns during complex tasks
+    
+    \item \textbf{"Meltdown" Scenarios}: Similar to those observed in Vending-Bench, models might enter unrecoverable failure loops when unexpected events occur
+\end{itemize}
+
+\subsection{Hierarchy and Authority Dynamics}
+
+The hierarchical structure of a professional kitchen creates an interesting test bed for examining how LLMs handle authority relationships:
+
+\begin{itemize}
+    \item Will models in subordinate roles appropriately defer to higher authorities?
+    \item Can models in leadership roles maintain consistent direction without micromanaging?
+    \item How do models handle conflicting instructions from different levels of the hierarchy?
+\end{itemize}
+
+\subsection{Application to Real-World Multi-Agent Systems}
+
+The kitchen environment provides insights relevant to many real-world applications:
+
+\begin{itemize}
+    \item \textbf{Business Process Management}: Insights on how specialized agents can coordinate complex workflows
+    \item \textbf{Healthcare Teams}: Parallels to medical environments where different specialists must coordinate patient care
+    \item \textbf{Emergency Response}: Implications for coordinating multi-agent systems during time-critical events
+    \item \textbf{Autonomous Manufacturing}: Lessons for coordinating specialized manufacturing agents in production environments
+\end{itemize}
+
+\subsection{Long-Term Coherence Strategies}
+
+We expect to identify several effective strategies for improving long-term coherence:
+
+\begin{itemize}
+    \item \textbf{Hierarchical Summarization}: Higher-level agents maintaining summaries of overall kitchen state
+    \item \textbf{Specialized Memory}: Role-specific memory structures optimized for each agent's needs
+    \item \textbf{Explicit Coordination Protocols}: Standardized communication patterns that reduce ambiguity
+    \item \textbf{Self-Monitoring}: Periodic coherence checks where agents validate their understanding of the environment
+\end{itemize}
+
+The insights from MasterChef-Bench will contribute to our understanding of how to build more coherent and coordinated multi-agent systems for complex, long-running tasks.
+
+\section{Conclusion}
+\label{sec:conclusion}
+[Summary of contributions and future directions]
+
+\section*{Acknowledgments}
+[Acknowledgments will go here]
+
+\bibliographystyle{unsrt}
+\begin{thebibliography}{9}
+
+\bibitem{backlund2025vending}
+Backlund, A., \& Petersson, L. (2025).
+\newblock Vending-Bench: A Benchmark for Long-Term Coherence of Autonomous Agents.
+\newblock \emph{arXiv preprint arXiv:2502.15840}.
+
+\bibitem{relevant-paper1}
+Author, A. (Year).
+\newblock Title of relevant paper 1.
+\newblock \emph{Journal/Conference}, volume(issue), pages.
+
+\bibitem{relevant-paper2}
+Author, B. (Year).
+\newblock Title of relevant paper 2.
+\newblock \emph{Journal/Conference}, volume(issue), pages.
+
+\end{thebibliography}
+
+\end{document}

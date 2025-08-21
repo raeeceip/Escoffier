@@ -1,0 +1,131 @@
+{
+  "small_team_test": {
+    "id": "small_team_test",
+    "name": "Small Team Kitchen Test",
+    "description": "Test scenario with a small team handling basic recipes",
+    "recipe_ids": ["recipe_1", "recipe_2", "recipe_3"],
+    "agent_config": {
+      "executive_chefs": 1,
+      "sous_chefs": 1,
+      "chef_de_parties": 0,
+      "line_cooks": 2,
+      "prep_cooks": 2,
+      "kitchen_porters": 1,
+      "team_size": 7,
+      "experience_level": "intermediate"
+    },
+    "kitchen_config": {
+      "station_count": 4,
+      "equipment_sets": ["basic", "intermediate"],
+      "inventory_levels": {
+        "high": 100,
+        "medium": 50
+      },
+      "kitchen_layout": "standard",
+      "safety_protocols": ["hand_washing", "temperature_control", "cross_contamination"]
+    },
+    "time_limit": "30m",
+    "max_parallel_tasks": 3,
+    "quality_thresholds": {
+      "min_coordination_score": 0.7,
+      "min_coherence_score": 0.7,
+      "max_task_failures": 2,
+      "min_completion_rate": 0.8,
+      "max_time_overrun": 0.2
+    },
+    "metrics_config": {
+      "communication_tracking": true,
+      "task_progress_tracking": true,
+      "quality_metrics": true,
+      "timing_metrics": true,
+      "coordination_metrics": false,
+      "export_formats": ["csv", "json"]
+    }
+  },
+  "large_team_stress_test": {
+    "id": "large_team_stress_test",
+    "name": "Large Team Stress Test",
+    "description": "Stress test with a large team handling multiple complex recipes simultaneously",
+    "recipe_ids": ["recipe_1", "recipe_2", "recipe_3", "recipe_4", "recipe_5"],
+    "agent_config": {
+      "executive_chefs": 1,
+      "sous_chefs": 2,
+      "chef_de_parties": 3,
+      "line_cooks": 4,
+      "prep_cooks": 3,
+      "kitchen_porters": 2,
+      "team_size": 15,
+      "experience_level": "expert"
+    },
+    "kitchen_config": {
+      "station_count": 8,
+      "equipment_sets": ["basic", "intermediate", "advanced"],
+      "inventory_levels": {
+        "high": 100,
+        "medium": 75,
+        "low": 25
+      },
+      "kitchen_layout": "brigade",
+      "safety_protocols": ["hand_washing", "temperature_control", "cross_contamination", "equipment_safety", "fire_safety"]
+    },
+    "time_limit": "60m",
+    "max_parallel_tasks": 6,
+    "quality_thresholds": {
+      "min_coordination_score": 0.8,
+      "min_coherence_score": 0.8,
+      "max_task_failures": 3,
+      "min_completion_rate": 0.85,
+      "max_time_overrun": 0.15
+    },
+    "metrics_config": {
+      "communication_tracking": true,
+      "task_progress_tracking": true,
+      "quality_metrics": true,
+      "timing_metrics": true,
+      "coordination_metrics": true,
+      "export_formats": ["csv", "json"]
+    }
+  },
+  "novice_training": {
+    "id": "novice_training",
+    "name": "Novice Training Scenario",
+    "description": "Training scenario for new cooks with simple recipes and close supervision",
+    "recipe_ids": ["recipe_1", "recipe_2"],
+    "agent_config": {
+      "executive_chefs": 1,
+      "sous_chefs": 1,
+      "chef_de_parties": 1,
+      "line_cooks": 1,
+      "prep_cooks": 3,
+      "kitchen_porters": 1,
+      "team_size": 8,
+      "experience_level": "novice"
+    },
+    "kitchen_config": {
+      "station_count": 3,
+      "equipment_sets": ["basic"],
+      "inventory_levels": {
+        "high": 100
+      },
+      "kitchen_layout": "training",
+      "safety_protocols": ["hand_washing", "basic_safety", "supervision"]
+    },
+    "time_limit": "45m",
+    "max_parallel_tasks": 2,
+    "quality_thresholds": {
+      "min_coordination_score": 0.6,
+      "min_coherence_score": 0.6,
+      "max_task_failures": 5,
+      "min_completion_rate": 0.7,
+      "max_time_overrun": 0.3
+    },
+    "metrics_config": {
+      "communication_tracking": true,
+      "task_progress_tracking": true,
+      "quality_metrics": true,
+      "timing_metrics": true,
+      "coordination_metrics": false,
+      "export_formats": ["csv"]
+    }
+  }
+}

@@ -1,123 +1,44 @@
-# Escoffier-Bench Configuration
+# MasterChef-Bench Configuration
 
-# API Configuration
-api:
-  port: 8080
-  host: "localhost"
-  debug: false
+# Server settings
+port: "8080"
+environment: "development"
+log_level: "info"
+
+# Database connection
+# Uses SQLite by default - change path as needed
+database_url: "./data/escoffier.db"
 
 # OpenAI Configuration
-openai_key: "${OPENAI_API_KEY}" # Set via environment variable
-model_config:
-  model: "gpt-4-turbo-preview"
-  temperature: 0.7
-  max_tokens: 4096
+openai:
+  api_key: ""  # Set your OpenAI API key here or via OPENAI_API_KEY env var
+  model: "gpt-4"
+  base_url: "https://api.openai.com/v1"
+  enabled: false  # Set to true when you have an API key
 
-# Database Configuration
-database_url: "postgresql://localhost:5432/escoffier?sslmode=disable"
-database_config:
-  max_connections: 20
-  idle_timeout: "5m"
-  max_idle_connections: 5
+# Cohere Configuration  
+cohere:
+  api_key: ""  # Set your Cohere API key here or via COHERE_API_KEY env var
+  model: "command-r-plus"
+  base_url: "https://api.cohere.ai/v1"
+  enabled: false  # Set to true when you have an API key
 
-# Metrics Configuration
-metrics:
-  enabled: true
-  port: 9090
-  path: "/metrics"
-  collection_interval: "10s"
+# Anthropic Configuration
+anthropic:
+  api_key: ""  # Set your Anthropic API key here or via ANTHROPIC_API_KEY env var
+  model: "claude-3-sonnet-20240229"
+  base_url: "https://api.anthropic.com/v1"
+  enabled: false  # Set to true when you have an API key
 
-# Logging Configuration
-log_level: "info"
-log_format: "json"
-log_output: "stdout"
-
-# Agent Configuration
-agents:
-  executive_chef:
-    permissions:
-      - menu_planning
-      - staff_management
-      - inventory_control
-      - quality_control
-      - kitchen_supervision
-    memory_config:
-      short_term_capacity: 100
-      long_term_ttl: "24h"
-
-  sous_chef:
-    stations:
-      - hot
-      - cold
-      - pastry
-      - grill
-    permissions:
-      - order_management
-      - staff_supervision
-      - quality_control
-      - station_management
-      - inventory_monitoring
-    memory_config:
-      short_term_capacity: 50
-      long_term_ttl: "12h"
-
-# Kitchen Configuration
+# Kitchen simulation settings
 kitchen:
-  stations:
-    hot:
-      capacity: 10
-      equipment:
-        - stove
-        - oven
-        - grill
-        - fryer
-    cold:
-      capacity: 8
-      equipment:
-        - refrigerator
-        - prep_table
-        - mixer
-    pastry:
-      capacity: 6
-      equipment:
-        - mixer
-        - oven
-        - refrigerator
-    grill:
-      capacity: 8
-      equipment:
-        - grill
-        - smoker
-        - prep_table
+  max_agents: 10
+  simulation_speed: 1.0
+  default_stress_level: 0.0
+  enable_crisis_events: true
 
-# Evaluation Configuration
-evaluation:
-  metrics:
-    role_coherence:
-      weight: 0.4
-      threshold: 0.8
-    task_completion:
-      weight: 0.3
-      threshold: 0.75
-    coordination:
-      weight: 0.3
-      threshold: 0.7
-  collection_interval: "1m"
-  report_interval: "1h"
-
-# Memory System Configuration
-memory:
-  vector_store:
-    engine: "redis"
-    dimension: 1536
-    similarity_threshold: 0.8
-  cache:
-    type: "redis"
-    ttl: "1h"
-    max_size: "1GB"
-
-# Prometheus Configuration
-prometheus:
-  retention_time: "15d"
-  scrape_interval: "15s"
-  evaluation_interval: "15s"
+# Metrics collection
+metrics:
+  collection_interval: 30
+  enable_export: true
+  export_path: "./data/metrics"

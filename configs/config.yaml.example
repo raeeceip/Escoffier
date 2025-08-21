@@ -1,0 +1,239 @@
+# Escoffier Kitchen Simulation Platform Configuration
+# Copy this file to config.yaml and customize for your environment
+
+# Database Configuration
+database:
+  # SQLite database path (recommended for development)
+  url: "sqlite:///./data/escoffier.db"
+  # For production, you might use PostgreSQL:
+  # url: "postgresql://user:password@localhost:5432/escoffier"
+  echo: false  # Set to true for SQL debugging
+  pool_size: 10
+  max_overflow: 20
+
+# LLM Provider Configuration
+# Add your API keys here for the providers you want to use
+llm_providers:
+  # OpenAI Configuration
+  openai:
+    api_key: "${OPENAI_API_KEY}"  # Set environment variable or replace with actual key
+    model: "gpt-3.5-turbo"        # Options: gpt-3.5-turbo, gpt-4, gpt-4-turbo
+    max_tokens: 1000
+    temperature: 0.7
+    timeout: 30
+    enabled: true
+
+  # Anthropic Claude Configuration  
+  anthropic:
+    api_key: "${ANTHROPIC_API_KEY}"  # Set environment variable or replace with actual key
+    model: "claude-3-haiku-20240307"  # Options: claude-3-haiku, claude-3-sonnet, claude-3-opus
+    max_tokens: 1000
+    temperature: 0.7
+    timeout: 30
+    enabled: true
+
+  # Cohere Configuration
+  cohere:
+    api_key: "${COHERE_API_KEY}"  # Set environment variable or replace with actual key
+    model: "command-r"            # Options: command, command-r, command-r-plus
+    max_tokens: 1000
+    temperature: 0.7
+    timeout: 30
+    enabled: true
+
+  # Hugging Face Transformers (Local)
+  huggingface:
+    model: "microsoft/DialoGPT-medium"  # Local model, no API key needed
+    cache_dir: "./models"               # Where to store downloaded models
+    device: "cpu"                       # Options: cpu, cuda, mps
+    max_length: 512
+    temperature: 0.7
+    enabled: true
+
+# Kitchen Simulation Configuration
+kitchen:
+  # Kitchen layout and capacity
+  stations:
+    - name: "prep"
+      capacity: 2
+      equipment: ["cutting_boards", "knives", "mixing_bowls"]
+    - name: "hot"
+      capacity: 4
+      equipment: ["stoves", "ovens", "grills", "deep_fryers"]
+    - name: "cold"
+      capacity: 2
+      equipment: ["refrigerators", "ice_machines", "salad_prep"]
+    - name: "pastry"
+      capacity: 2
+      equipment: ["mixers", "ovens", "cooling_racks"]
+    - name: "grill"
+      capacity: 2
+      equipment: ["grills", "salamanders"]
+    - name: "garde_manger"
+      capacity: 2
+      equipment: ["slicers", "cold_storage"]
+
+  # Equipment configuration
+  equipment:
+    - type: "oven"
+      count: 3
+      capacity: 4  # dishes at once
+      preheat_time: 10  # minutes
+    - type: "stove"
+      count: 6
+      burners: 4
+    - type: "grill"
+      count: 2
+      capacity: 8  # portions
+    - type: "deep_fryer"
+      count: 2
+      capacity: 4  # portions
+    - type: "mixer"
+      count: 2
+      capacity: 10  # liters
+
+  # Inventory management
+  inventory:
+    restock_threshold: 10  # percentage
+    auto_restock: true
+    categories:
+      - "proteins"
+      - "vegetables"
+      - "grains"
+      - "dairy"
+      - "seasonings"
+      - "oils"
+
+  # Timing and constraints
+  service_hours:
+    start: "11:00"
+    end: "22:00"
+  rush_periods:
+    - start: "12:00"
+      end: "14:00"
+      intensity: 1.5
+    - start: "18:00"
+      end: "21:00"
+      intensity: 2.0
+
+# Agent Configuration
+agents:
+  # Skill definitions
+  skills:
+    leadership: ["delegation", "coordination", "decision_making"]
+    knife_skills: ["chopping", "dicing", "julienne", "chiffonade"]
+    sauce_making: ["mother_sauces", "emulsification", "reduction"]
+    grilling: ["temperature_control", "timing", "presentation"]
+    baking: ["measuring", "mixing", "temperature_control"]
+    pastry: ["lamination", "tempering", "decoration"]
+    organization: ["mise_en_place", "inventory", "cleanliness"]
+
+  # Default experience levels
+  experience_levels:
+    novice: 0-30
+    intermediate: 31-70
+    expert: 71-100
+
+  # Role hierarchy
+  hierarchy:
+    executive_chef: 5
+    head_chef: 4
+    sous_chef: 3
+    chef_de_partie: 2
+    line_cook: 1
+    prep_cook: 0
+
+# Scenario Configuration
+scenarios:
+  # Default scenario parameters
+  defaults:
+    duration_minutes: 45
+    max_agents: 6
+    difficulty: "medium"
+    time_pressure: 1.0
+    crisis_probability: 0.1
+
+  # Scenario types and their characteristics
+  types:
+    cooking_challenge:
+      focus: "recipe_execution"
+      time_pressure: 1.2
+      collaboration_required: true
+    service_rush:
+      focus: "speed_efficiency"
+      time_pressure: 2.0
+      parallel_orders: true
+    crisis_management:
+      focus: "problem_solving"
+      equipment_failures: true
+      crisis_probability: 0.3
+    skill_assessment:
+      focus: "individual_performance"
+      time_pressure: 0.8
+      detailed_logging: true
+
+# Metrics and Analytics Configuration
+metrics:
+  # Data collection settings
+  collection:
+    real_time: true
+    detailed_logging: true
+    performance_tracking: true
+    communication_tracking: true
+
+  # Export settings
+  export:
+    formats: ["csv", "json", "excel"]
+    auto_export: false
+    output_directory: "data/analytics"
+
+  # Chart generation
+  visualization:
+    enabled: true
+    chart_types: ["performance", "collaboration", "timeline", "distribution"]
+    output_format: "html"  # Options: html, png, pdf
+    interactive: true
+
+# API Server Configuration
+api:
+  host: "127.0.0.1"
+  port: 8000
+  debug: false
+  cors_origins: ["http://localhost:3000", "http://localhost:8080"]
+  max_request_size: 16777216  # 16MB
+  timeout: 300  # seconds
+
+# Logging Configuration
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+  file: "data/escoffier.log"
+  rotation: "1 day"
+  retention: "7 days"
+
+# Data Directories
+directories:
+  data: "data"
+  models: "models"
+  recipes: "data/recipes"
+  scenarios: "data/scenarios"
+  outputs: "data/outputs"
+  analytics: "data/analytics"
+  charts: "data/analytics/charts"
+  reports: "data/analytics/reports"
+
+# Research Settings
+research:
+  # Reproducibility
+  random_seed: 42
+  deterministic: false
+  
+  # Data collection
+  save_all_interactions: true
+  save_llm_responses: true
+  save_performance_metrics: true
+  
+  # Analysis
+  statistical_analysis: true
+  correlation_analysis: true
+  trend_analysis: true

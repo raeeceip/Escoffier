@@ -1,0 +1,29 @@
+{
+  "report_id": "8138c520-5c84-4b16-95c1-321aa56e4f6e",
+  "title": "Escoffier Kitchen Simulation Analysis Report",
+  "generated_at": "2025-08-21T05:35:38.461932",
+  "summary": "Analysis of 0 agents across 0 scenarios.\n        Overall system performance: 0.0% scenario success rate.\n        Key metrics: 0 performance indicators tracked.",
+  "findings": [],
+  "recommendations": [
+    {
+      "category": "Collaboration",
+      "title": "Increase agent communication",
+      "description": "Low communication levels may indicate poor collaboration",
+      "priority": "medium",
+      "actions": [
+        "Encourage more frequent status updates",
+        "Implement structured communication protocols",
+        "Add collaboration incentives"
+      ]
+    }
+  ],
+  "visualizations": [],
+  "raw_data": {
+    "agent_analysis": {},
+    "collaboration_analysis": {
+      "total_communications": 0
+    },
+    "scenario_analysis": {},
+    "metrics": {}
+  }
+}
