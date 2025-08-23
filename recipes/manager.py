@@ -62,7 +62,7 @@ class RecipeStep:
     instruction: str
     duration_minutes: float
     temperature: Optional[int] = None
-    equipment: List[str] = None
+    equipment: Optional[str] = None
     techniques: List[str] = None
     
     def __post_init__(self):
@@ -473,12 +473,12 @@ class RecipeManager:
             
     def search_recipes(
         self,
-        query: str = None,
-        cuisine: str = None,
-        difficulty: str = None,
-        max_time: int = None,
-        ingredients: List[str] = None,
-        techniques: List[str] = None
+        query: Optional[str] = None,
+        cuisine: Optional[str] = None,
+        difficulty: Optional[str] = None,
+        max_time: Optional[int] = None,
+        ingredients: Optional[List[str]] = None,
+        techniques: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """Search recipes with multiple filters"""
         if self.recipes_df is None or self.recipes_df.empty:
@@ -519,6 +519,10 @@ class RecipeManager:
                 mask = df['techniques'].astype(str).str.contains(technique, case=False, na=False)
                 df = df[mask]
                 
+        # Ensure we always return a DataFrame, not a Series
+        if isinstance(df, pd.Series):
+            df = df.to_frame().T
+        
         return df
         
     def get_recipe_recommendations(

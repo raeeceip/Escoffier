@@ -648,3 +648,22 @@ async def shutdown_app(api: EscoffierAPI):
         await api.db_manager.close()
         
     logger.info("Escoffier API shutdown complete")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    from config import Config
+    
+    # Load configuration
+    config = Config()
+    
+    # Create app
+    app = create_app(config)
+    
+    # Run server
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_level="info"
+    )

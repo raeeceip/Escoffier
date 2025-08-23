@@ -6,7 +6,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 import json
 import pandas as pd
 from datetime import datetime
@@ -17,6 +17,7 @@ from database import DatabaseManager
 from agents.manager import AgentManager
 from kitchen.engine import KitchenEngine
 from recipes.manager import RecipeManager
+from recipes.kaggle_parser import KaggleRecipeParser
 from scenarios.executor import ScenarioExecutor, ScenarioConfig
 from metrics.collector import MetricsCollector
 from api.server import EscoffierAPI
@@ -36,25 +37,8 @@ class EscoffierCLI:
     def __init__(self, config_path: str = "configs/config.yaml"):
         """Initialize CLI with configuration"""
         self.config_path = Path(config_path)
-        self.config: Optional[Config] = None
-        self.components_initialized = False
         
-        # Components
-        self.db_manager: Optional[DatabaseManager] = None
-        self.agent_manager: Optional[AgentManager] = None
-        self.kitchen_engine: Optional[KitchenEngine] = None
-        self.recipe_manager: Optional[RecipeManager] = None
-        self.scenario_executor: Optional[ScenarioExecutor] = None
-        self.metrics_collector: Optional[MetricsCollector] = None
-        
-    async def _ensure_initialized(self):
-        """Ensure all components are initialized"""
-        if self.components_initialized:
-            return
-            
-        logger.info("Initializing Escoffier components...")
-        
-        # Load configuration
+        # Initialize everything immediately - no reason to delay
         from config import get_settings
         from database import init_database, get_database
         from agents.manager import AgentManager
@@ -63,28 +47,37 @@ class EscoffierCLI:
         from scenarios.executor import ScenarioExecutor
         from metrics.collector import MetricsCollector
         
-        self.config = get_settings()
+        # Load configuration
+        from config import load_settings
+        self.config: Config = load_settings(self.config_path)
         
-        # Initialize database first
-        self.db_manager = init_database(self.config, create_tables=True)
+        # Initialize database
+        self.db_manager: DatabaseManager = init_database(self.config, create_tables=True)
         
-        # Initialize kitchen engine with database and settings
-        self.kitchen_engine = KitchenEngine(database=get_database(), settings=self.config) 
+        # Initialize kitchen engine
+        self.kitchen_engine: KitchenEngine = KitchenEngine(database=get_database(), settings=self.config)
         
-        # Initialize agent manager with dependencies
-        self.agent_manager = AgentManager(self.config, self.db_manager, self.kitchen_engine)
+        # Initialize components
+        self.agent_manager: AgentManager = AgentManager(self.config, self.db_manager, self.kitchen_engine)
+        self.recipe_manager: RecipeManager = RecipeManager(self.config, self.db_manager)
+        self.scenario_executor: ScenarioExecutor = ScenarioExecutor(self.config, self.db_manager, self.agent_manager, self.kitchen_engine, self.recipe_manager)
+        self.metrics_collector: MetricsCollector = MetricsCollector(self.config, self.db_manager)
+        
+        # Flag to track if async initialization is complete
+        self.async_initialized = False
+        
+    async def _ensure_async_initialized(self):
+        """Ensure async components are initialized"""
+        if self.async_initialized:
+            return
+            
+        logger.info("Completing async initialization...")
+        
+        # Only async initialization needed
         await self.agent_manager.initialize()
         
-        # Initialize other components
-        self.recipe_manager = RecipeManager(self.config, self.db_manager)
-        self.scenario_executor = ScenarioExecutor(self.config, self.db_manager, self.agent_manager, self.kitchen_engine, self.recipe_manager)
-        self.metrics_collector = MetricsCollector(self.config, self.db_manager)
-        
-        self.components_initialized = True
-        logger.info("Initialization complete")
-        
-        self.components_initialized = True
-        logger.info("Initialization complete")
+        self.async_initialized = True
+        logger.info("Async initialization complete")
         
     def _run_async(self, coro):
         """Run async function in sync context"""
@@ -112,7 +105,7 @@ class EscoffierCLI:
             llm_provider: LLM provider to use (openai, anthropic, cohere, huggingface)
         """
         async def _create():
-            await self._ensure_initialized()
+            await self._ensure_async_initialized()
             
             # Parse agent type
             agent_type_enum = AgentType(agent_type.lower())
@@ -140,7 +133,6 @@ class EscoffierCLI:
     def list_agents(self) -> None:
         """List all agents"""
         async def _list():
-            await self._ensure_initialized()
             
             # Query agents directly from database
             with self.db_manager.get_session() as session:
@@ -156,13 +148,13 @@ class EscoffierCLI:
                 
                 for agent in agents:
                     print(f"{agent.id:<5} {agent.name:<20} {agent.role.value:<15} {agent.model_provider:<12} {agent.model_name:<15} {agent.experience_level}")
-            
+                
         return self._run_async(_list())
-
+    
     def get_team_status(self) -> None:
         """Get current team status"""
         async def _status():
-            await self._ensure_initialized()
+            await self._ensure_async_initialized()
             
             status = self.agent_manager.get_team_status()
             
@@ -204,16 +196,16 @@ class EscoffierCLI:
             limit: Maximum number of results
         """
         async def _search():
-            await self._ensure_initialized()
+            assert self.recipe_manager is not None, "Recipe manager not initialized"
             
             # Parse ingredients
             ingredients_list = [i.strip() for i in ingredients.split(",")] if ingredients else []
             
             results = self.recipe_manager.search_recipes(
-                query=query if query else None,
-                cuisine=cuisine if cuisine else None,
-                difficulty=difficulty if difficulty else None,
-                max_time=max_time if max_time > 0 else None,
+                query=query,
+                cuisine=cuisine,
+                difficulty=difficulty,
+                max_time=max_time if max_time and max_time > 0 else None,
                 ingredients=ingredients_list
             )
             
@@ -242,7 +234,6 @@ class EscoffierCLI:
     ) -> None:
         """Get recipe recommendations based on constraints"""
         async def _recommend():
-            await self._ensure_initialized()
             
             skills_list = [s.strip() for s in agent_skills.split(",")] if agent_skills else []
             ingredients_list = [i.strip() for i in available_ingredients.split(",")] if available_ingredients else []
@@ -276,7 +267,6 @@ class EscoffierCLI:
     def recipe_stats(self) -> None:
         """Show recipe database statistics"""
         async def _stats():
-            await self._ensure_initialized()
             
             stats = self.recipe_manager.get_recipe_statistics()
             
@@ -328,7 +318,7 @@ class EscoffierCLI:
             crisis_probability: Crisis event probability
         """
         async def _run():
-            await self._ensure_initialized()
+            await self._ensure_async_initialized()
             
             # Parse recipe IDs
             if isinstance(recipes, int):
@@ -343,7 +333,22 @@ class EscoffierCLI:
                 recipe_ids = []
                 recipe_count = 0
             
-            # If no recipes specified, get some recommendations
+            # If no recipes specified, add default recipes based on scenario type
+            if not recipe_ids:
+                if scenario_type.lower() == "collaboration_test":
+                    recipe_ids = ["pasta_carbonara", "caesar_salad"]
+                    recipe_count = len(recipe_ids)
+                elif scenario_type.lower() == "service_rush":
+                    recipe_ids = ["grilled_chicken", "roasted_vegetables", "caesar_salad"]
+                    recipe_count = len(recipe_ids)
+                elif scenario_type.lower() == "cooking_competition":
+                    recipe_ids = ["beef_wellington", "chocolate_souffle", "lobster_bisque"]
+                    recipe_count = len(recipe_ids)
+                else:
+                    recipe_ids = ["pasta_aglio_olio", "simple_salad"]
+                    recipe_count = len(recipe_ids)
+            
+            # If still no recipes specified, get some recommendations
             if not recipe_ids and recipe_count > 0:
                 recommendations = self.recipe_manager.get_recipe_recommendations(
                     agent_skills=[],
@@ -392,7 +397,6 @@ class EscoffierCLI:
     def list_scenarios(self, limit: int = 10) -> None:
         """List recent scenarios"""
         async def _list():
-            await self._ensure_initialized()
             
             results = list(self.scenario_executor.execution_results.values())
             
@@ -446,7 +450,6 @@ class EscoffierCLI:
             output_dir: Directory for output files
         """
         async def _metrics():
-            await self._ensure_initialized()
             
             await self.metrics_collector.refresh_data()
             metrics = self.metrics_collector.calculate_all_metrics()
@@ -478,7 +481,6 @@ class EscoffierCLI:
     def analyze_performance(self) -> None:
         """Analyze agent performance"""
         async def _analyze():
-            await self._ensure_initialized()
             
             analysis = self.metrics_collector.analyze_agent_performance()
             
@@ -505,7 +507,6 @@ class EscoffierCLI:
     def analyze_collaboration(self) -> None:
         """Analyze collaboration patterns"""
         async def _analyze():
-            await self._ensure_initialized()
             
             analysis = self.metrics_collector.analyze_collaboration_patterns()
             
@@ -528,7 +529,6 @@ class EscoffierCLI:
     def generate_report(self, output_file: str = "") -> str:
         """Generate comprehensive analysis report"""
         async def _generate():
-            await self._ensure_initialized()
             
             report = self.metrics_collector.generate_comprehensive_report()
             
@@ -570,7 +570,6 @@ class EscoffierCLI:
     def export_data(self, format: str = "csv", output_dir: str = "exports") -> str:
         """Export all data for research"""
         async def _export():
-            await self._ensure_initialized()
             
             output_path = Path(output_dir)
             output_path.mkdir(exist_ok=True)
@@ -639,7 +638,6 @@ class EscoffierCLI:
     def init_db(self) -> None:
         """Initialize database with sample data"""
         async def _init():
-            await self._ensure_initialized()
             
             # Create some sample agents
             agent_configs = [
@@ -666,16 +664,231 @@ class EscoffierCLI:
             
         self._run_async(_init())
         
+    def parse_kaggle_recipes(
+        self,
+        train_path: str,
+        test_path: Optional[str] = None,
+        output_dir: Optional[str] = None,
+        use_multiprocessing: bool = True,
+        export_to_manager: bool = True
+    ) -> Dict[str, str]:
+        """Parse Kaggle recipe dataset and convert to structured format
+        
+        Args:
+            train_path: Path to training JSON file (required)
+            test_path: Path to test JSON file (optional)
+            output_dir: Output directory for processed files
+            use_multiprocessing: Use multiprocessing for large datasets
+            export_to_manager: Export to recipe manager for immediate use
+        """
+        async def _parse():
+            
+            print(f"🔍 Parsing Kaggle recipe dataset...")
+            print(f"Training data: {train_path}")
+            if test_path:
+                print(f"Test data: {test_path}")
+                
+            parser = KaggleRecipeParser(self.config, self.db_manager)
+            
+            # Load dataset
+            print("📂 Loading dataset...")
+            recipe_count, ingredient_count = await parser.load_kaggle_dataset(
+                train_path, test_path, use_multiprocessing
+            )
+            
+            print(f"✅ Loaded {recipe_count:,} recipes with {ingredient_count:,} unique ingredients")
+            
+            # Convert to structured format
+            print("🔄 Converting to structured format...")
+            structured_df = parser.convert_to_structured_recipes()
+            print(f"✅ Converted to {len(structured_df):,} structured recipes")
+            
+            # Save processed data
+            print("💾 Saving processed data...")
+            files_created = parser.save_processed_data(output_dir)
+            print("📄 Created files:")
+            for file_type, file_path in files_created.items():
+                print(f"  • {file_type}: {file_path}")
+                
+            # Export to recipe manager if requested
+            if export_to_manager and self.recipe_manager:
+                print("📤 Exporting to recipe manager...")
+                exported_count = await parser.export_to_recipe_manager(self.recipe_manager)
+                print(f"✅ Exported {exported_count:,} recipes to recipe manager")
+                
+            # Show statistics
+            print("\n📊 Dataset Statistics:")
+            ingredient_stats = parser.get_ingredient_statistics()
+            cuisine_stats = parser.get_cuisine_statistics()
+            
+            print(f"\n🥕 Top 10 Most Common Ingredients:")
+            for i, (ingredient, count) in enumerate(ingredient_stats['most_common_ingredients'][:10], 1):
+                percentage = (count / ingredient_stats['total_recipes']) * 100
+                print(f"  {i:2d}. {ingredient:<20} {count:>6,} ({percentage:5.1f}%)")
+                
+            print(f"\n🍜 Top 10 Cuisines:")
+            for i, (cuisine, count) in enumerate(cuisine_stats['most_popular_cuisines'][:10], 1):
+                percentage = (count / cuisine_stats['total_recipes']) * 100
+                print(f"  {i:2d}. {str(cuisine).title():<15} {count:>6,} ({percentage:5.1f}%)")
+                
+            print(f"\n📈 Processing Summary:")
+            print(f"  • Total recipes: {recipe_count:,}")
+            print(f"  • Unique ingredients: {ingredient_count:,}")
+            print(f"  • Unique cuisines: {len(cuisine_stats['cuisine_distribution']):,}")
+            print(f"  • Average ingredients per recipe: {ingredient_count / recipe_count:.1f}")
+            
+            return files_created
+            
+        return self._run_async(_parse())
+        
+    def download_kaggle_dataset(
+        self,
+        dataset: str = "kaggle/recipe-ingredients-dataset",
+        output_dir: Optional[str] = None
+    ) -> None:
+        """Download Kaggle dataset (requires kaggle CLI)
+        
+        Args:
+            dataset: Kaggle dataset identifier
+            output_dir: Directory to download to
+        """
+        import subprocess
+        import os
+        
+        if output_dir is None:
+            output_dir = str(self.config.data_dir) if self.config else "data"
+            
+        output_path = Path(output_dir)
+        output_path.mkdir(exist_ok=True, parents=True)
+        
+        print(f"📥 Downloading Kaggle dataset: {dataset}")
+        print(f"📁 Output directory: {output_path}")
+        
+        try:
+            # Check if kaggle CLI is installed
+            result = subprocess.run(
+                ["kaggle", "--version"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print(f"✅ Kaggle CLI found: {result.stdout.strip()}")
+            
+            # Download dataset
+            cmd = ["kaggle", "datasets", "download", "-d", dataset, "-p", str(output_path), "--unzip"]
+            print(f"🔄 Running: {' '.join(cmd)}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            print("✅ Download complete!")
+            
+            # List downloaded files
+            downloaded_files = list(output_path.glob("*.json"))
+            print(f"📄 Downloaded files:")
+            for file_path in downloaded_files:
+                size_mb = file_path.stat().st_size / (1024 * 1024)
+                print(f"  • {file_path.name} ({size_mb:.1f} MB)")
+                
+            # Suggest next steps
+            train_file = output_path / "train.json"
+            test_file = output_path / "test.json"
+            
+            if train_file.exists():
+                print(f"\n🚀 Next step: Parse the dataset with:")
+                print(f"python -m cli.main parse_kaggle_recipes \"{train_file}\"", end="")
+                if test_file.exists():
+                    print(f" --test_path \"{test_file}\"")
+                else:
+                    print()
+                    
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error downloading dataset: {e}")
+            print(f"stderr: {e.stderr}")
+            print("\n💡 Make sure you have:")
+            print("  1. Installed kaggle CLI: pip install kaggle")
+            print("  2. Configured API credentials: https://github.com/Kaggle/kaggle-api#api-credentials")
+        except FileNotFoundError:
+            print("❌ Kaggle CLI not found!")
+            print("💡 Install with: pip install kaggle")
+            print("💡 Configure credentials: https://github.com/Kaggle/kaggle-api#api-credentials")
+            
+    def analyze_recipe_dataset(self, dataset_path: Optional[str] = None) -> None:
+        """Analyze loaded recipe dataset
+        
+        Args:
+            dataset_path: Path to CSV file (optional, uses current recipe manager data if not provided)
+        """
+        async def _analyze():
+            
+            if dataset_path:
+                print(f"📊 Analyzing recipe dataset: {dataset_path}")
+                # Load specific dataset
+                df = pd.read_csv(dataset_path)
+            else:
+                print("📊 Analyzing current recipe manager data")
+                if not self.recipe_manager or self.recipe_manager.recipes_df is None or self.recipe_manager.recipes_df.empty:
+                    print("❌ No recipe data loaded. Load recipes first or specify dataset_path")
+                    return
+                df = self.recipe_manager.recipes_df
+                
+            print(f"📋 Dataset Overview:")
+            print(f"  • Total recipes: {len(df):,}")
+            print(f"  • Columns: {', '.join(df.columns)}")
+            
+            # Basic statistics
+            if 'cuisine' in df.columns:
+                cuisine_counts = df['cuisine'].value_counts()
+                print(f"\n🍜 Cuisine Distribution:")
+                for cuisine, count in cuisine_counts.head(10).items():
+                    percentage = (count / len(df)) * 100
+                    print(f"  • {str(cuisine).title():<15} {count:>6,} ({percentage:5.1f}%)")
+                    
+            if 'difficulty' in df.columns:
+                difficulty_counts = df['difficulty'].value_counts()
+                print(f"\n⚡ Difficulty Distribution:")
+                for difficulty, count in difficulty_counts.items():
+                    percentage = (count / len(df)) * 100
+                    print(f"  • {str(difficulty).title():<10} {count:>6,} ({percentage:5.1f}%)")
+                    
+            if 'prep_time' in df.columns and 'cook_time' in df.columns:
+                df['total_time'] = df['prep_time'] + df['cook_time']
+                print(f"\n⏱️  Time Statistics:")
+                print(f"  • Avg prep time: {df['prep_time'].mean():.1f} min")
+                print(f"  • Avg cook time: {df['cook_time'].mean():.1f} min")
+                print(f"  • Avg total time: {df['total_time'].mean():.1f} min")
+                print(f"  • Quick recipes (<30 min): {len(df[df['total_time'] <= 30]):,}")
+                print(f"  • Long recipes (>2 hours): {len(df[df['total_time'] > 120]):,}")
+                
+            if 'ingredient_count' in df.columns:
+                print(f"\n🥕 Ingredient Statistics:")
+                print(f"  • Avg ingredients per recipe: {df['ingredient_count'].mean():.1f}")
+                print(f"  • Min ingredients: {df['ingredient_count'].min()}")
+                print(f"  • Max ingredients: {df['ingredient_count'].max()}")
+                print(f"  • Simple recipes (≤5 ingredients): {len(df[df['ingredient_count'] <= 5]):,}")
+                print(f"  • Complex recipes (>15 ingredients): {len(df[df['ingredient_count'] > 15]):,}")
+                
+            # Recipe manager specific analysis
+            if not dataset_path and self.recipe_manager:
+                stats = self.recipe_manager.get_recipe_statistics()
+                if stats:
+                    print(f"\n📈 Recipe Manager Statistics:")
+                    print(f"  • Total recipes loaded: {stats['total_recipes']:,}")
+                    if 'nutrition_stats' in stats:
+                        nutrition = stats['nutrition_stats']
+                        print(f"  • Avg calories per serving: {nutrition['average_calories']:.0f}")
+                        print(f"  • Avg protein per serving: {nutrition['average_protein']:.1f}g")
+                        
+        self._run_async(_analyze())
+
     def cleanup(self) -> None:
         """Cleanup resources and reset system"""
         async def _cleanup():
-            if self.components_initialized:
+            if True:  # Always do cleanup since we initialize immediately
                 if self.agent_manager:
                     await self.agent_manager.cleanup()
                 if self.scenario_executor:
                     await self.scenario_executor.cleanup()
                 if self.db_manager and hasattr(self.db_manager, 'close'):
-                    await self.db_manager.close()
+                    self.db_manager.close()  # Remove await since close() isn't async
                     
             print("Cleanup complete")
             

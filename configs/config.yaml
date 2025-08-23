@@ -6,39 +6,39 @@ environment: "development"
 log_level: "info"
 
 # Database connection
-# Uses SQLite by default - change path as needed
-database_url: "./data/escoffier.db"
+database_url: "sqlite:///./data/escoffier.db"
 
 # OpenAI Configuration
 openai:
   api_key: ""  # Set your OpenAI API key here or via OPENAI_API_KEY env var
   model: "gpt-4"
-  base_url: "https://api.openai.com/v1"
-  enabled: false  # Set to true when you have an API key
-
-# Cohere Configuration  
-cohere:
-  api_key: ""  # Set your Cohere API key here or via COHERE_API_KEY env var
-  model: "command-r-plus"
-  base_url: "https://api.cohere.ai/v1"
   enabled: false  # Set to true when you have an API key
 
 # Anthropic Configuration
 anthropic:
   api_key: ""  # Set your Anthropic API key here or via ANTHROPIC_API_KEY env var
   model: "claude-3-sonnet-20240229"
-  base_url: "https://api.anthropic.com/v1"
   enabled: false  # Set to true when you have an API key
 
-# Kitchen simulation settings
-kitchen:
-  max_agents: 10
-  simulation_speed: 1.0
-  default_stress_level: 0.0
-  enable_crisis_events: true
+# Cohere Configuration
+cohere:
+  api_key: ""  # Set your Cohere API key here or via COHERE_API_KEY env var
+  model: "command-r-plus"
+  enabled: false  # Set to true when you have an API key
 
-# Metrics collection
-metrics:
-  collection_interval: 30
-  enable_export: true
-  export_path: "./data/metrics"
+# GitHub Models Configuration (FREE)
+github:
+  api_key: ""  # Set your GitHub token here or via GITHUB_TOKEN env var
+  model: "gpt-4o-mini"
+  enabled: false  # Set to true when you have a GitHub token
+
+# Ollama Configuration (FREE LOCAL)
+ollama:
+  model: "llama3.2:1b"
+  enabled: true  # Set to true when Ollama is running locally
+
+# Hugging Face Configuration (FREE)
+huggingface:
+  api_key: ""  # Set your HF token here or via HF_TOKEN env var
+  model: "microsoft/DialoGPT-medium"
+  enabled: false  # Set to true when you have an HF token

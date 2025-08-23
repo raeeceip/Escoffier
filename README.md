@@ -49,11 +49,43 @@ Escoffier addresses critical research questions in multi-agent systems, computat
 
 | Scenario | Duration | Complexity | Evaluation Focus |
 |----------|----------|------------|-----------------|
-| **Cooking Challenge** | 30-60 min | Medium-High | Task coordination, quality output |
-| **Service Rush** | 45-90 min | High | Time pressure, parallel processing |
-| **Crisis Management** | 30-45 min | Very High | Adaptability, problem-solving |
-| **Skill Assessment** | 20-40 min | Medium | Individual performance, technique |
-| **Team Building** | 60-120 min | Variable | Communication, hierarchy establishment |
+| **Cooking Challenge** | 3-6 min | Medium-High | Task coordination, quality output |
+| **Service Rush** | 5-10 min | High | Time pressure, parallel processing |
+| **Crisis Management** | 3-8 min | Very High | Adaptability, problem-solving |
+| **Skill Assessment** | 2-5 min | Medium | Individual performance, technique |
+| **Team Building** | 8-15 min | Variable | Communication, hierarchy establishment |
+
+### Recipe Dataset Integration
+
+Escoffier supports large-scale recipe datasets for realistic task assignment:
+
+| Dataset Type | Format | Parser | Source |
+|--------------|--------|--------|--------|
+| **Kaggle Recipe Dataset** | JSON | `KaggleRecipeParser` | [kaggle.com/datasets/kaggle/recipe-ingredients-dataset](https://www.kaggle.com/datasets/kaggle/recipe-ingredients-dataset) |
+| **Custom CSV** | CSV | `RecipeManager` | User-provided structured data |
+| **JSON Recipes** | JSON | `KaggleRecipeParser` | Custom or third-party recipe APIs |
+
+#### Loading Large Recipe Datasets
+
+```bash
+# Download Kaggle dataset (requires kaggle CLI)
+python -m cli.main download_kaggle_dataset
+
+# Parse downloaded dataset  
+python -m cli.main parse_kaggle_recipes "data/train.json" --test_path "data/test.json"
+
+# Analyze processed dataset
+python -m cli.main analyze_recipe_dataset
+
+# Run scenarios with large recipe database
+python -m cli.main run_scenario cooking_challenge --duration 5 --agents 4
+```
+
+The Kaggle Recipe Dataset contains **40,000+ recipes** across **20 cuisines** with ingredient lists, making it ideal for:
+- Realistic chef task assignment based on cuisine expertise
+- Ingredient availability constraints 
+- Recipe complexity analysis and difficulty estimation
+- Cross-cultural cooking scenario development
 
 ### Research Applications
 
@@ -142,6 +174,23 @@ python -m cli.main analyze_performance              # Provider comparison analys
 python -m cli.main analyze_collaboration           # Communication pattern analysis
 ```
 
+#### Recipe Dataset Management
+
+```bash
+# Download Kaggle recipe dataset
+python -m cli.main download_kaggle_dataset kaggle/recipe-ingredients-dataset
+
+# Parse large recipe datasets
+python -m cli.main parse_kaggle_recipes "data/train.json" \
+  --test_path "data/test.json" \
+  --use_multiprocessing true \
+  --export_to_manager true
+
+# Analyze recipe datasets
+python -m cli.main analyze_recipe_dataset            # Current loaded recipes
+python -m cli.main analyze_recipe_dataset "data/recipes.csv"  # Specific file
+```
+
 ### REST API
 
 ```bash
@@ -164,7 +213,7 @@ done
 # 2. Execute standardized scenarios
 for scenario in cooking_challenge service_rush crisis_management; do
     for trial in {1..10}; do
-        python -m cli.main run_scenario $scenario --duration 60
+        python -m cli.main run_scenario $scenario --duration 5
     done
 done
 
@@ -177,7 +226,7 @@ python -m cli.main analyze_performance --group_by llm_provider --export_results
 ```bash
 # High-stress evaluation with equipment failures
 python -m cli.main run_scenario crisis_management \
-  --duration 45 \
+  --duration 5 \
   --crisis_probability 0.6 \
   --equipment_failures true \
   --ingredient_shortage true
@@ -252,7 +301,7 @@ kitchen:
   crisis_probability: 0.2
   
 scenarios:
-  default_duration: 60  # minutes
+  default_duration: 5  # minutes
   quality_threshold: 0.75
   efficiency_weight: 0.3
   collaboration_weight: 0.4
@@ -264,10 +313,10 @@ scenarios:
 
 | Evaluation Type | Scenarios | Metrics | Duration |
 |-----------------|-----------|---------|----------|
-| **Basic Performance** | cooking_challenge | Task completion, quality | 30-60 min |
-| **Stress Testing** | service_rush | Response time, error rate | 45-90 min |
-| **Adaptability** | crisis_management | Recovery time, solution quality | 30-45 min |
-| **Skill Assessment** | skill_assessment | Technique accuracy, knowledge application | 20-40 min |
+| **Basic Performance** | cooking_challenge | Task completion, quality | 3-6 min |
+| **Stress Testing** | service_rush | Response time, error rate | 5-10 min |
+| **Adaptability** | crisis_management | Recovery time, solution quality | 3-8 min |
+| **Skill Assessment** | skill_assessment | Technique accuracy, knowledge application | 2-5 min |
 | **Long-term Study** | All scenarios (repeated) | Learning curves, consistency | Multiple sessions |
 
 ### Advanced Evaluation Options

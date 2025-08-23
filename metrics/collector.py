@@ -137,7 +137,7 @@ class MetricsCollector:
                 description="Percentage of successfully completed tasks",
                 source_table="tasks",
                 source_field="status",
-                aggregation=AggregationType.MEAN,
+                aggregation=AggregationType.COUNT,
                 filters={"status": "completed"}
             ),
             MetricDefinition(
@@ -228,8 +228,8 @@ class MetricsCollector:
                 agents_data = [{
                     'id': a.id,
                     'name': a.name,
-                    'agent_type': a.role.value if a.role else 'unknown',
-                    'status': 'active' if a.is_active else 'inactive',
+                    'agent_type': a.role.value if a.role is not None else 'unknown',
+                    'status': 'active' if bool(a.is_active) else 'inactive',
                     'llm_provider': a.model_provider,
                     'created_at': a.created_at
                 } for a in agents]
@@ -314,6 +314,11 @@ class MetricsCollector:
     def calculate_metric(self, metric_def: MetricDefinition, start_time: Optional[datetime] = None, 
                         end_time: Optional[datetime] = None) -> Optional[float]:
         """Calculate a specific metric"""
+        
+        # Handle special metrics with custom calculations
+        if metric_def.name == "task_success_rate":
+            return self._calculate_task_success_rate(start_time, end_time)
+        
         # Get appropriate dataframe
         if metric_def.source_table == "metrics":
             df = self.metrics_df
@@ -385,6 +390,34 @@ class MetricsCollector:
         else:
             logger.error(f"Unknown aggregation type: {metric_def.aggregation}")
             return None
+    
+    def _calculate_task_success_rate(self, start_time: Optional[datetime] = None, 
+                                   end_time: Optional[datetime] = None) -> Optional[float]:
+        """Calculate task success rate as percentage of completed tasks"""
+        if self.tasks_df is None or self.tasks_df.empty:
+            return None
+            
+        df = self.tasks_df.copy()
+        
+        # Apply time filters
+        if start_time or end_time:
+            time_col = 'timestamp' if 'timestamp' in df.columns else 'created_at'
+            if time_col in df.columns:
+                if start_time:
+                    df = df[pd.to_datetime(df[time_col]) >= start_time]
+                if end_time:
+                    df = df[pd.to_datetime(df[time_col]) <= end_time]
+                    
+        if df.empty:
+            return None
+            
+        total_tasks = len(df)
+        completed_tasks = len(df[df['status'] == 'completed'])
+        
+        if total_tasks == 0:
+            return None
+            
+        return (completed_tasks / total_tasks) * 100.0
             
     def calculate_all_metrics(self, start_time: Optional[datetime] = None,
                             end_time: Optional[datetime] = None) -> Dict[str, float]:
@@ -749,6 +782,11 @@ class MetricsCollector:
             df = pd.DataFrame(scenario_data)
             
             # Create scatter plot of quality vs efficiency
+            # Determine available hover data columns
+            hover_columns = ['duration']
+            if 'scenario_id' in df.columns:
+                hover_columns.append('scenario_id')
+                
             fig = px.scatter(
                 df,
                 x='efficiency_score',
@@ -757,7 +795,7 @@ class MetricsCollector:
                 size='duration',
                 title='Scenario Outcomes: Quality vs Efficiency',
                 labels={'efficiency_score': 'Efficiency Score', 'quality_score': 'Quality Score'},
-                hover_data=['scenario_id', 'duration']
+                hover_data=hover_columns
             )
             
             return fig
@@ -1252,8 +1290,12 @@ class MetricsCollector:
         # 6. Performance efficiency metrics
         if hasattr(self, 'metrics_df') and self.metrics_df is not None and not self.metrics_df.empty:
             # Metrics over time
+            id_columns = ['created_at']
+            if 'scenario_id' in self.metrics_df.columns:
+                id_columns.append('scenario_id')
+                
             metrics_over_time = self.metrics_df.melt(
-                id_vars=['scenario_id', 'created_at'],
+                id_vars=id_columns,
                 value_vars=[col for col in self.metrics_df.columns if col.endswith('_score')],
                 var_name='metric_type',
                 value_name='score'

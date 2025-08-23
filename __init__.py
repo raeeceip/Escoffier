@@ -29,7 +29,7 @@ from kitchen import KitchenEngine
 from recipes import RecipeManager, RecipeStep, RecipeIngredient, NutritionInfo
 from scenarios import ScenarioExecutor, ScenarioConfig, ExecutionResult
 from metrics import MetricsCollector, MetricType, AnalysisReport
-from providers import LLMProvider, get_llm_provider
+from providers import LLMProvider
 from api import EscoffierAPI, create_app
 from cli import EscoffierCLI, main
 import types
@@ -67,7 +67,6 @@ __all__ = [
     
     # LLM providers
     'LLMProvider',
-    'get_llm_provider',
     
     # API server
     'EscoffierAPI',

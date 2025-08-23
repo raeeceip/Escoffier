@@ -1,8 +1,11 @@
 test_output
-config.yaml
+.config.yaml
 .db
-.cpython-*.pyc
+.uv
 uv.lock
 data/
-
-
+.venv
+.github
+.vscode
+.__pycache__
+*.cpython-*.pyc

@@ -91,7 +91,7 @@ class KitchenEngine:
         
         # Simulation control
         self.is_running = False
-        self.simulation_speed = self.settings.kitchen.simulation_speed
+        self.simulation_speed = 1.0  # Default simulation speed
         self.tick_rate = 1.0  # Seconds between simulation ticks
         
         # Metrics tracking
@@ -357,8 +357,9 @@ class KitchenEngine:
     
     async def _handle_crisis_events(self):
         """Handle random crisis events to test agent coordination."""
-        if not self.settings.kitchen.enable_crisis_events:
-            return
+        # Crisis events are always enabled for now
+        # if not self.settings.kitchen.enable_crisis_events:
+        #     return
         
         # Only trigger crisis if not already in one
         if self.conditions.crisis_active:

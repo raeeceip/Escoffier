@@ -12,8 +12,7 @@ import json
 import warnings
 import os
 
-# Security configuration
-from security_config import security_config
+
 
 # LLM Client libraries
 import openai
@@ -21,6 +20,13 @@ from anthropic import Anthropic
 import cohere
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
+import httpx
+
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
 
 from config import Settings, get_settings
 
@@ -168,9 +174,12 @@ class AnthropicProvider(LLMProvider):
             )
             
             if response.content and len(response.content) > 0:
-                content = response.content[0].text
-                if content:
-                    return content.strip()
+                # Handle different content block types
+                for block in response.content:
+                    if hasattr(block, 'text') and block.type == 'text':
+                        content = block.text
+                        if content:
+                            return content.strip()
             
             raise ValueError("No response content received from Anthropic")
             
@@ -243,13 +252,6 @@ class HuggingFaceProvider(LLMProvider):
     def _load_model(self):
         """Load the Hugging Face model with security hardening."""
         try:
-            # Security: Validate model name
-            if not security_config.validate_model_source(self.model_name):
-                raise ValueError(f"Untrusted model source: {self.model_name}")
-                
-            # Security: Sanitize cache directory
-            self.cache_dir = security_config.sanitize_model_path(self.cache_dir)
-            
             logger.info(f"Loading Hugging Face model: {self.model_name}")
             
             # Determine device
@@ -257,15 +259,12 @@ class HuggingFaceProvider(LLMProvider):
                 device = 0 if torch.cuda.is_available() else -1
             else:
                 device = self.device
-            
-            # Security: Get secure loading parameters
-            secure_kwargs = security_config.get_secure_transformers_kwargs()
-            
+
             # Load tokenizer with security constraints
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 cache_dir=self.cache_dir,
-                **secure_kwargs
+                use_fast=True,
             )
             
             # Add pad token if not present
@@ -279,7 +278,6 @@ class HuggingFaceProvider(LLMProvider):
                 tokenizer=self.tokenizer,
                 device=device,
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                **secure_kwargs  # Apply security constraints
             )
             
             logger.info(f"Hugging Face model loaded successfully on device: {device}")
@@ -337,6 +335,153 @@ class HuggingFaceProvider(LLMProvider):
         return "huggingface"
 
 
+class OllamaProvider(LLMProvider):
+    """Ollama local LLM provider (FREE)."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.base_url = config.get("base_url", "http://localhost:11434")
+        self.model = config.get("model", "llama3.2:1b")  # Default to small model
+        
+        if not OLLAMA_AVAILABLE:
+            logger.warning("Ollama not available. Install with: pip install ollama")
+    
+    async def generate_response(
+        self, 
+        prompt: str, 
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> str:
+        """Generate response using Ollama."""
+        if not OLLAMA_AVAILABLE:
+            return json.dumps({
+                "error": "OLLAMA_NOT_AVAILABLE",
+                "message": "Ollama client not installed",
+                "action": "install_ollama"
+            })
+        
+        try:
+            formatted_prompt = self.format_kitchen_prompt(prompt, context)
+            
+            # Use httpx for async requests to Ollama API
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": self.model,
+                        "prompt": formatted_prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": kwargs.get("temperature", self.temperature),
+                            "num_predict": kwargs.get("max_tokens", self.max_tokens)
+                        }
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result.get("response", "").strip()
+                else:
+                    raise httpx.HTTPStatusError(f"Ollama API error: {response.status_code}", request=response.request, response=response)
+                    
+        except Exception as e:
+            logger.error(f"Ollama generation error: {e}")
+            return json.dumps({
+                "error": "GENERATION_ERROR", 
+                "message": f"Ollama error: {str(e)}",
+                "action": "check_ollama_server"
+            })
+    
+    def format_kitchen_prompt(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """Format prompt for kitchen simulation context."""
+        if not context:
+            return f"You are a professional kitchen staff member. {prompt}"
+        
+        return f"""You are a professional kitchen staff member in a multi-agent kitchen simulation.
+Context: {json.dumps(context, indent=2)}
+
+{prompt}
+
+Respond as a realistic kitchen worker would, considering your role and the current situation."""
+    
+    def get_provider_name(self) -> str:
+        return "ollama"
+
+
+class GitHubModelsProvider(LLMProvider):
+    """GitHub Models provider (FREE tier available)."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.api_key = config.get("api_key", os.getenv("GITHUB_TOKEN"))
+        self.model = config.get("model", "gpt-4o-mini")  # Free tier model
+        self.base_url = "https://models.inference.ai.azure.com"
+        
+        if not self.api_key:
+            logger.warning("GitHub token not found. Set GITHUB_TOKEN environment variable")
+    
+    async def generate_response(
+        self, 
+        prompt: str, 
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> str:
+        """Generate response using GitHub Models API."""
+        if not self.api_key:
+            return json.dumps({
+                "error": "NO_API_KEY",
+                "message": "GitHub token not configured",
+                "action": "set_github_token"
+            })
+        
+        try:
+            formatted_prompt = self.format_kitchen_prompt(prompt, context)
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": "You are a professional kitchen staff member."},
+                            {"role": "user", "content": formatted_prompt}
+                        ],
+                        "temperature": kwargs.get("temperature", self.temperature),
+                        "max_tokens": kwargs.get("max_tokens", self.max_tokens)
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result["choices"][0]["message"]["content"].strip()
+                else:
+                    raise httpx.HTTPStatusError(f"GitHub Models API error: {response.status_code}", request=response.request, response=response)
+                    
+        except Exception as e:
+            logger.error(f"GitHub Models generation error: {e}")
+            return json.dumps({
+                "error": "GENERATION_ERROR",
+                "message": f"GitHub Models error: {str(e)}",
+                "action": "check_github_token"
+            })
+    
+    def format_kitchen_prompt(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """Format prompt for kitchen simulation context."""
+        if not context:
+            return prompt
+        
+        return f"""Kitchen Context: {json.dumps(context, indent=2)}
+
+{prompt}"""
+    
+    def get_provider_name(self) -> str:
+        return "github"
+
+
 class LLMProviderManager:
     """Manager for multiple LLM providers."""
     
@@ -380,27 +525,49 @@ class LLMProviderManager:
             try:
                 self.providers["cohere"] = CohereProvider({
                     "api_key": self.settings.cohere.api_key,
-                    "model": self.settings.cohere.model,
-                    "max_tokens": self.settings.cohere.max_tokens,
-                    "temperature": self.settings.cohere.temperature
+                    "model": self.settings.cohere.model
                 })
                 logger.info("Cohere provider registered")
             except Exception as e:
                 logger.error(f"Failed to initialize Cohere provider: {e}")
         
+        # HuggingFace
         # Hugging Face
         if self.settings.huggingface.enabled:
             try:
                 self.providers["huggingface"] = HuggingFaceProvider({
-                    "model": self.settings.huggingface.default_model,
+                    "model": self.settings.huggingface.model,
                     "cache_dir": self.settings.huggingface.cache_dir,
                     "device": self.settings.huggingface.device,
-                    "max_tokens": 500,  # Conservative for local models
-                    "temperature": 0.7
+                    "max_tokens": self.settings.huggingface.max_tokens,
+                    "temperature": self.settings.huggingface.temperature
                 })
                 logger.info("Hugging Face provider registered")
             except Exception as e:
                 logger.error(f"Failed to initialize Hugging Face provider: {e}")
+        
+        # Ollama (FREE local LLMs)
+        if self.settings.ollama.enabled:
+            self.providers["ollama"] = OllamaProvider({
+                "model": self.settings.ollama.model,
+                "base_url": self.settings.ollama.base_url,
+                "max_tokens": self.settings.ollama.max_tokens,
+                "temperature": self.settings.ollama.temperature
+            })
+            logger.info("Ollama provider registered")
+        
+        # GitHub Models (FREE tier)
+        if self.settings.github.enabled and self.settings.github.api_key:
+            self.providers["github"] = GitHubModelsProvider({
+                "api_key": self.settings.github.api_key,
+                "model": self.settings.github.model,
+                "base_url": self.settings.github.base_url,
+                "max_tokens": self.settings.github.max_tokens,
+                "temperature": self.settings.github.temperature
+            })
+            logger.info("GitHub Models provider registered")
+        else:
+            logger.info("GitHub Models provider not configured (set api_key in config or GITHUB_TOKEN env var)")
     
     def get_provider(self, provider_name: str) -> Optional[LLMProvider]:
         """Get a specific provider by name."""

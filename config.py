@@ -34,24 +34,12 @@ class OpenAIConfig(BaseSettings):
         description="OpenAI API key"
     )
     model: str = Field(
-        default="gpt-4-turbo-preview",
+        default="gpt-4",
         description="Default OpenAI model"
-    )
-    base_url: str = Field(
-        default="https://api.openai.com/v1",
-        description="OpenAI API base URL"
     )
     enabled: bool = Field(
         default=False,
         description="Enable OpenAI provider"
-    )
-    max_tokens: int = Field(
-        default=1000,
-        description="Default max tokens for responses"
-    )
-    temperature: float = Field(
-        default=0.7,
-        description="Default temperature for responses"
     )
 
     class Config:
@@ -69,21 +57,9 @@ class AnthropicConfig(BaseSettings):
         default="claude-3-sonnet-20240229",
         description="Default Anthropic model"
     )
-    base_url: str = Field(
-        default="https://api.anthropic.com",
-        description="Anthropic API base URL"
-    )
     enabled: bool = Field(
         default=False,
         description="Enable Anthropic provider"
-    )
-    max_tokens: int = Field(
-        default=1000,
-        description="Default max tokens for responses"
-    )
-    temperature: float = Field(
-        default=0.7,
-        description="Default temperature for responses"
     )
 
     class Config:
@@ -101,21 +77,9 @@ class CohereConfig(BaseSettings):
         default="command-r-plus",
         description="Default Cohere model"
     )
-    base_url: str = Field(
-        default="https://api.cohere.ai",
-        description="Cohere API base URL"
-    )
     enabled: bool = Field(
         default=False,
         description="Enable Cohere provider"
-    )
-    max_tokens: int = Field(
-        default=1000,
-        description="Default max tokens for responses"
-    )
-    temperature: float = Field(
-        default=0.7,
-        description="Default temperature for responses"
     )
 
     class Config:
@@ -123,81 +87,59 @@ class CohereConfig(BaseSettings):
 
 
 class HuggingFaceConfig(BaseSettings):
-    """Hugging Face Transformers configuration."""
+    """Hugging Face configuration."""
     
-    cache_dir: str = Field(
-        default="./models",
-        description="Directory to cache models"
+    api_key: Optional[str] = Field(
+        default=None,
+        description="Hugging Face API token"
     )
-    device: str = Field(
-        default="auto",
-        description="Device to run models on (cpu, cuda, auto)"
+    model: str = Field(
+        default="microsoft/DialoGPT-medium",
+        description="Default model"
     )
     enabled: bool = Field(
-        default=True,
-        description="Enable local Hugging Face models"
-    )
-    default_model: str = Field(
-        default="microsoft/DialoGPT-medium",
-        description="Default local model for fallback"
+        default=False,
+        description="Enable Hugging Face provider"
     )
 
     class Config:
         env_prefix = "HF_"
 
 
-class KitchenConfig(BaseSettings):
-    """Kitchen simulation configuration."""
+class GitHubConfig(BaseSettings):
+    """GitHub Models API configuration (FREE)."""
     
-    max_agents: int = Field(
-        default=10,
-        description="Maximum number of agents in simulation"
+    api_key: Optional[str] = Field(
+        default=None,
+        description="GitHub token"
     )
-    simulation_speed: float = Field(
-        default=1.0,
-        description="Simulation speed multiplier"
+    model: str = Field(
+        default="gpt-4o-mini",
+        description="Default GitHub model"
     )
-    default_stress_level: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Default stress level for agents"
-    )
-    enable_crisis_events: bool = Field(
-        default=True,
-        description="Enable random crisis events"
-    )
-    max_concurrent_tasks: int = Field(
-        default=5,
-        description="Maximum concurrent tasks per agent"
+    enabled: bool = Field(
+        default=False,
+        description="Enable GitHub Models provider"
     )
 
     class Config:
-        env_prefix = "KITCHEN_"
+        env_prefix = "GITHUB_"
 
 
-class MetricsConfig(BaseSettings):
-    """Metrics collection configuration."""
+class OllamaConfig(BaseSettings):
+    """Ollama local LLM configuration (FREE)."""
     
-    collection_interval: int = Field(
-        default=30,
-        description="Metrics collection interval in seconds"
+    model: str = Field(
+        default="llama3.2:1b",
+        description="Default Ollama model"
     )
-    enable_export: bool = Field(
+    enabled: bool = Field(
         default=True,
-        description="Enable metrics export"
-    )
-    export_path: str = Field(
-        default="./data/metrics",
-        description="Path to export metrics"
-    )
-    export_formats: list[str] = Field(
-        default=["json", "csv"],
-        description="Export formats (json, csv, parquet)"
+        description="Enable Ollama provider"
     )
 
     class Config:
-        env_prefix = "METRICS_"
+        env_prefix = "OLLAMA_"
 
 
 class APIConfig(BaseSettings):
@@ -269,8 +211,8 @@ class Settings(BaseSettings):
     anthropic: AnthropicConfig = Field(default_factory=AnthropicConfig)
     cohere: CohereConfig = Field(default_factory=CohereConfig)
     huggingface: HuggingFaceConfig = Field(default_factory=HuggingFaceConfig)
-    kitchen: KitchenConfig = Field(default_factory=KitchenConfig)
-    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    github: GitHubConfig = Field(default_factory=GitHubConfig)
+    ollama: OllamaConfig = Field(default_factory=OllamaConfig)
     api: APIConfig = Field(default_factory=APIConfig)
 
     class Config:
@@ -305,6 +247,10 @@ class Settings(BaseSettings):
             providers.append("cohere")
         if self.huggingface.enabled:
             providers.append("huggingface")
+        if self.github.enabled and self.github.api_key:
+            providers.append("github")
+        if self.ollama.enabled:
+            providers.append("ollama")
         return providers
 
 
@@ -329,7 +275,25 @@ def load_settings(config_file: Optional[Path] = None) -> Settings:
         import yaml
         with open(config_file) as f:
             config_data = yaml.safe_load(f)
-        _settings = Settings(**config_data)
+        
+        # Transform YAML structure to match Settings structure
+        transformed_data = {}
+        
+        # Handle top-level fields that should go into database config
+        if 'database_url' in config_data:
+            transformed_data['database'] = {'url': config_data['database_url']}
+        
+        # Copy other top-level fields that Settings expects
+        for key in ['environment', 'log_level', 'debug', 'data_dir', 'recipes_file']:
+            if key in config_data:
+                transformed_data[key] = config_data[key]
+        
+        # Copy nested configurations directly
+        for key in ['openai', 'anthropic', 'cohere', 'huggingface', 'github', 'ollama', 'kitchen', 'metrics']:
+            if key in config_data:
+                transformed_data[key] = config_data[key]
+        
+        _settings = Settings(**transformed_data)
     else:
         _settings = Settings()
     
