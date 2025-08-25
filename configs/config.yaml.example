@@ -43,7 +43,7 @@ llm_providers:
 
   # Hugging Face Transformers (Local)
   huggingface:
-    model: "microsoft/DialoGPT-medium"  # Local model, no API key needed
+    model: "cohere/command-r"  # Local model, no API key needed
     cache_dir: "./models"               # Where to store downloaded models
     device: "cpu"                       # Options: cpu, cuda, mps
     max_length: 512

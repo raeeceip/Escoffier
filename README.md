@@ -282,7 +282,7 @@ llm_providers:
 
   huggingface:
     enabled: true
-    model: "microsoft/DialoGPT-medium"
+    model: "cohere/command-r"
     cache_dir: "./models"
 ```
 

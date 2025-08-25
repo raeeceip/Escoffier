@@ -7,5 +7,5 @@ data/
 .venv
 .github
 .vscode
-.__pycache__
-*.cpython-*.pyc
+*.pyc
+*.__pycache__

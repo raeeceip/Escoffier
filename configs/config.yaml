@@ -40,5 +40,5 @@ ollama:
 # Hugging Face Configuration (FREE)
 huggingface:
   api_key: ""  # Set your HF token here or via HF_TOKEN env var
-  model: "microsoft/DialoGPT-medium"
+  model: "cohere/command-r"
   enabled: false  # Set to true when you have an HF token

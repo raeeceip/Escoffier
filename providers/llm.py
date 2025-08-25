@@ -1,632 +1,315 @@
 """
-LLM Provider system with real API integrations for OpenAI, Anthropic, Cohere, and Hugging Face.
-Security hardened against deserialization and remote code execution vulnerabilities.
+LMM Coordinator for ChefBench
+Manages multi-agent message passing and task coordination
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Union
 import asyncio
-import logging
-from datetime import datetime
 import json
-import warnings
-import os
-
-
-
-# LLM Client libraries
-import openai
-from anthropic import Anthropic
-import cohere
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-import torch
-import httpx
-
-try:
-    import ollama
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
-
-from config import Settings, get_settings
+import time
+from typing import Dict, List, Optional, Tuple, Any
+from collections import defaultdict
+import logging
+from models.models import LLMAgent, AgentRole, TaskType, Message, TaskExecution
 
 logger = logging.getLogger(__name__)
 
 
-class LLMProvider(ABC):
-    """Abstract base class for LLM providers."""
+class MultiAgentCoordinator:
+    """Coordinates multiple LLM agents in kitchen simulation"""
     
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.model_name = config.get("model", "unknown")
-        self.max_tokens = config.get("max_tokens", 1000)
-        self.temperature = config.get("temperature", 0.7)
-    
-    @abstractmethod
-    async def generate_response(
+    def __init__(self):
+        self.agents: Dict[str, LLMAgent] = {}
+        self.message_bus: List[Message] = []
+        self.task_queue: List[Tuple[str, TaskType, Dict]] = []
+        self.execution_history: List[TaskExecution] = []
+        self.scenario_start_time: Optional[float] = None
+        self.scenario_end_time: Optional[float] = None
+        
+    def create_agent(
         self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate a response from the LLM."""
-        pass
-    
-    @abstractmethod
-    def get_provider_name(self) -> str:
-        """Get the provider name."""
-        pass
-    
-    def get_model_name(self) -> str:
-        """Get the model name."""
-        return self.model_name
-    
-    def format_kitchen_prompt(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """Format prompt for kitchen assistant context."""
-        system_message = (
-            "You are a professional kitchen assistant AI working in a busy commercial kitchen. "
-            "You must respond ONLY with valid JSON. Your responses should be practical, "
-            "precise, and focused on kitchen operations. Consider food safety, efficiency, "
-            "and coordination with other kitchen staff."
-        )
+        name: str, 
+        role: AgentRole,
+        model_name: str = "cohere/command-r"
+    ) -> LLMAgent:
+        """Create and register an agent"""
+        if name in self.agents:
+            logger.warning(f"Agent {name} already exists, replacing")
         
-        if context:
-            context_str = f"\nContext: {json.dumps(context, indent=2)}"
-        else:
-            context_str = ""
-        
-        return f"{system_message}{context_str}\n\nRequest: {prompt}\n\nResponse (JSON only):"
-
-
-class OpenAIProvider(LLMProvider):
-    """OpenAI GPT provider."""
+        agent = LLMAgent(name, role, model_name)
+        self.agents[name] = agent
+        logger.info(f"Created agent {name} with role {role.name} using {model_name}")
+        return agent
     
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.api_key = config["api_key"]
-        self.base_url = config.get("base_url", "https://api.openai.com/v1")
-        self.client = openai.AsyncOpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
-        logger.info(f"OpenAI provider initialized with model: {self.model_name}")
-    
-    async def generate_response(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate response using OpenAI API."""
-        try:
-            formatted_prompt = self.format_kitchen_prompt(prompt, context)
-            
-            response = await self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a professional kitchen assistant AI. Respond only with valid JSON."
-                    },
-                    {
-                        "role": "user", 
-                        "content": formatted_prompt
-                    }
-                ],
-                max_tokens=kwargs.get("max_tokens", self.max_tokens),
-                temperature=kwargs.get("temperature", self.temperature),
-                response_format={"type": "json_object"}
-            )
-            
-            if response.choices and len(response.choices) > 0:
-                content = response.choices[0].message.content
-                if content:
-                    return content.strip()
-            
-            raise ValueError("No response content received from OpenAI")
-            
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            # Return a fallback JSON response
-            return json.dumps({
-                "error": "LLM_API_ERROR",
-                "message": f"OpenAI API error: {str(e)}",
-                "action": "fallback_response"
-            })
-    
-    def get_provider_name(self) -> str:
-        return "openai"
-
-
-class AnthropicProvider(LLMProvider):
-    """Anthropic Claude provider."""
-    
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.api_key = config["api_key"]
-        self.client = Anthropic(api_key=self.api_key)
-        logger.info(f"Anthropic provider initialized with model: {self.model_name}")
-    
-    async def generate_response(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate response using Anthropic API."""
-        try:
-            formatted_prompt = self.format_kitchen_prompt(prompt, context)
-            
-            # Anthropic uses synchronous client, wrap in asyncio
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.client.messages.create(
-                    model=self.model_name,
-                    max_tokens=kwargs.get("max_tokens", self.max_tokens),
-                    temperature=kwargs.get("temperature", self.temperature),
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": formatted_prompt
-                        }
-                    ]
-                )
-            )
-            
-            if response.content and len(response.content) > 0:
-                # Handle different content block types
-                for block in response.content:
-                    if hasattr(block, 'text') and block.type == 'text':
-                        content = block.text
-                        if content:
-                            return content.strip()
-            
-            raise ValueError("No response content received from Anthropic")
-            
-        except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
-            return json.dumps({
-                "error": "LLM_API_ERROR",
-                "message": f"Anthropic API error: {str(e)}",
-                "action": "fallback_response"
-            })
-    
-    def get_provider_name(self) -> str:
-        return "anthropic"
-
-
-class CohereProvider(LLMProvider):
-    """Cohere provider."""
-    
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.api_key = config["api_key"]
-        self.client = cohere.AsyncClient(api_key=self.api_key)
-        logger.info(f"Cohere provider initialized with model: {self.model_name}")
-    
-    async def generate_response(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate response using Cohere API."""
-        try:
-            formatted_prompt = self.format_kitchen_prompt(prompt, context)
-            
-            response = await self.client.chat(
-                model=self.model_name,
-                message=formatted_prompt,
-                max_tokens=kwargs.get("max_tokens", self.max_tokens),
-                temperature=kwargs.get("temperature", self.temperature)
-            )
-            
-            if response.text:
-                return response.text.strip()
-            
-            raise ValueError("No response text received from Cohere")
-            
-        except Exception as e:
-            logger.error(f"Cohere API error: {e}")
-            return json.dumps({
-                "error": "LLM_API_ERROR", 
-                "message": f"Cohere API error: {str(e)}",
-                "action": "fallback_response"
-            })
-    
-    def get_provider_name(self) -> str:
-        return "cohere"
-
-
-class HuggingFaceProvider(LLMProvider):
-    """Hugging Face local model provider."""
-    
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.cache_dir = config.get("cache_dir", "./models")
-        self.device = config.get("device", "auto")
-        self.pipeline = None
-        self.tokenizer = None
-        self._load_model()
-    
-    def _load_model(self):
-        """Load the Hugging Face model with security hardening."""
-        try:
-            logger.info(f"Loading Hugging Face model: {self.model_name}")
-            
-            # Determine device
-            if self.device == "auto":
-                device = 0 if torch.cuda.is_available() else -1
-            else:
-                device = self.device
-
-            # Load tokenizer with security constraints
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                cache_dir=self.cache_dir,
-                use_fast=True,
-            )
-            
-            # Add pad token if not present
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            # Security: Create pipeline with restricted parameters
-            self.pipeline = pipeline(
-                "text-generation",
-                model=self.model_name,
-                tokenizer=self.tokenizer,
-                device=device,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            )
-            
-            logger.info(f"Hugging Face model loaded successfully on device: {device}")
-            
-        except Exception as e:
-            logger.error(f"Failed to load Hugging Face model: {e}")
-            logger.error(f"This may be due to security restrictions or missing model files")
-            self.pipeline = None
-    
-    async def generate_response(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate response using local Hugging Face model."""
-        if not self.pipeline:
-            return json.dumps({
-                "error": "MODEL_NOT_LOADED",
-                "message": "Hugging Face model not available",
-                "action": "fallback_response"
-            })
-        
-        try:
-            formatted_prompt = self.format_kitchen_prompt(prompt, context)
-            
-            # Run in thread pool to avoid blocking
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.pipeline(
-                    formatted_prompt,
-                    max_new_tokens=kwargs.get("max_tokens", self.max_tokens),
-                    temperature=kwargs.get("temperature", self.temperature),
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    return_full_text=False
-                )
-            )
-            
-            if response and len(response) > 0:
-                generated_text = response[0]["generated_text"]
-                return generated_text.strip()
-            
-            raise ValueError("No response generated from Hugging Face model")
-            
-        except Exception as e:
-            logger.error(f"Hugging Face generation error: {e}")
-            return json.dumps({
-                "error": "GENERATION_ERROR",
-                "message": f"Local model error: {str(e)}",
-                "action": "fallback_response"
-            })
-    
-    def get_provider_name(self) -> str:
-        return "huggingface"
-
-
-class OllamaProvider(LLMProvider):
-    """Ollama local LLM provider (FREE)."""
-    
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.base_url = config.get("base_url", "http://localhost:11434")
-        self.model = config.get("model", "llama3.2:1b")  # Default to small model
-        
-        if not OLLAMA_AVAILABLE:
-            logger.warning("Ollama not available. Install with: pip install ollama")
-    
-    async def generate_response(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate response using Ollama."""
-        if not OLLAMA_AVAILABLE:
-            return json.dumps({
-                "error": "OLLAMA_NOT_AVAILABLE",
-                "message": "Ollama client not installed",
-                "action": "install_ollama"
-            })
-        
-        try:
-            formatted_prompt = self.format_kitchen_prompt(prompt, context)
-            
-            # Use httpx for async requests to Ollama API
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/api/generate",
-                    json={
-                        "model": self.model,
-                        "prompt": formatted_prompt,
-                        "stream": False,
-                        "options": {
-                            "temperature": kwargs.get("temperature", self.temperature),
-                            "num_predict": kwargs.get("max_tokens", self.max_tokens)
-                        }
-                    }
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    return result.get("response", "").strip()
-                else:
-                    raise httpx.HTTPStatusError(f"Ollama API error: {response.status_code}", request=response.request, response=response)
-                    
-        except Exception as e:
-            logger.error(f"Ollama generation error: {e}")
-            return json.dumps({
-                "error": "GENERATION_ERROR", 
-                "message": f"Ollama error: {str(e)}",
-                "action": "check_ollama_server"
-            })
-    
-    def format_kitchen_prompt(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """Format prompt for kitchen simulation context."""
-        if not context:
-            return f"You are a professional kitchen staff member. {prompt}"
-        
-        return f"""You are a professional kitchen staff member in a multi-agent kitchen simulation.
-Context: {json.dumps(context, indent=2)}
-
-{prompt}
-
-Respond as a realistic kitchen worker would, considering your role and the current situation."""
-    
-    def get_provider_name(self) -> str:
-        return "ollama"
-
-
-class GitHubModelsProvider(LLMProvider):
-    """GitHub Models provider (FREE tier available)."""
-    
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.api_key = config.get("api_key", os.getenv("GITHUB_TOKEN"))
-        self.model = config.get("model", "gpt-4o-mini")  # Free tier model
-        self.base_url = "https://models.inference.ai.azure.com"
-        
-        if not self.api_key:
-            logger.warning("GitHub token not found. Set GITHUB_TOKEN environment variable")
-    
-    async def generate_response(
-        self, 
-        prompt: str, 
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """Generate response using GitHub Models API."""
-        if not self.api_key:
-            return json.dumps({
-                "error": "NO_API_KEY",
-                "message": "GitHub token not configured",
-                "action": "set_github_token"
-            })
-        
-        try:
-            formatted_prompt = self.format_kitchen_prompt(prompt, context)
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": [
-                            {"role": "system", "content": "You are a professional kitchen staff member."},
-                            {"role": "user", "content": formatted_prompt}
-                        ],
-                        "temperature": kwargs.get("temperature", self.temperature),
-                        "max_tokens": kwargs.get("max_tokens", self.max_tokens)
-                    }
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    return result["choices"][0]["message"]["content"].strip()
-                else:
-                    raise httpx.HTTPStatusError(f"GitHub Models API error: {response.status_code}", request=response.request, response=response)
-                    
-        except Exception as e:
-            logger.error(f"GitHub Models generation error: {e}")
-            return json.dumps({
-                "error": "GENERATION_ERROR",
-                "message": f"GitHub Models error: {str(e)}",
-                "action": "check_github_token"
-            })
-    
-    def format_kitchen_prompt(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """Format prompt for kitchen simulation context."""
-        if not context:
-            return prompt
-        
-        return f"""Kitchen Context: {json.dumps(context, indent=2)}
-
-{prompt}"""
-    
-    def get_provider_name(self) -> str:
-        return "github"
-
-
-class LLMProviderManager:
-    """Manager for multiple LLM providers."""
-    
-    def __init__(self, settings: Optional[Settings] = None):
-        self.settings = settings or get_settings()
-        self.providers: Dict[str, LLMProvider] = {}
-        self._initialize_providers()
-    
-    def _initialize_providers(self):
-        """Initialize all available LLM providers."""
-        
-        # OpenAI
-        if self.settings.openai.enabled and self.settings.openai.api_key:
-            try:
-                self.providers["openai"] = OpenAIProvider({
-                    "api_key": self.settings.openai.api_key,
-                    "model": self.settings.openai.model,
-                    "base_url": self.settings.openai.base_url,
-                    "max_tokens": self.settings.openai.max_tokens,
-                    "temperature": self.settings.openai.temperature
-                })
-                logger.info("OpenAI provider registered")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI provider: {e}")
-        
-        # Anthropic
-        if self.settings.anthropic.enabled and self.settings.anthropic.api_key:
-            try:
-                self.providers["anthropic"] = AnthropicProvider({
-                    "api_key": self.settings.anthropic.api_key,
-                    "model": self.settings.anthropic.model,
-                    "max_tokens": self.settings.anthropic.max_tokens,
-                    "temperature": self.settings.anthropic.temperature
-                })
-                logger.info("Anthropic provider registered")
-            except Exception as e:
-                logger.error(f"Failed to initialize Anthropic provider: {e}")
-        
-        # Cohere
-        if self.settings.cohere.enabled and self.settings.cohere.api_key:
-            try:
-                self.providers["cohere"] = CohereProvider({
-                    "api_key": self.settings.cohere.api_key,
-                    "model": self.settings.cohere.model
-                })
-                logger.info("Cohere provider registered")
-            except Exception as e:
-                logger.error(f"Failed to initialize Cohere provider: {e}")
-        
-        # HuggingFace
-        # Hugging Face
-        if self.settings.huggingface.enabled:
-            try:
-                self.providers["huggingface"] = HuggingFaceProvider({
-                    "model": self.settings.huggingface.model,
-                    "cache_dir": self.settings.huggingface.cache_dir,
-                    "device": self.settings.huggingface.device,
-                    "max_tokens": self.settings.huggingface.max_tokens,
-                    "temperature": self.settings.huggingface.temperature
-                })
-                logger.info("Hugging Face provider registered")
-            except Exception as e:
-                logger.error(f"Failed to initialize Hugging Face provider: {e}")
-        
-        # Ollama (FREE local LLMs)
-        if self.settings.ollama.enabled:
-            self.providers["ollama"] = OllamaProvider({
-                "model": self.settings.ollama.model,
-                "base_url": self.settings.ollama.base_url,
-                "max_tokens": self.settings.ollama.max_tokens,
-                "temperature": self.settings.ollama.temperature
-            })
-            logger.info("Ollama provider registered")
-        
-        # GitHub Models (FREE tier)
-        if self.settings.github.enabled and self.settings.github.api_key:
-            self.providers["github"] = GitHubModelsProvider({
-                "api_key": self.settings.github.api_key,
-                "model": self.settings.github.model,
-                "base_url": self.settings.github.base_url,
-                "max_tokens": self.settings.github.max_tokens,
-                "temperature": self.settings.github.temperature
-            })
-            logger.info("GitHub Models provider registered")
-        else:
-            logger.info("GitHub Models provider not configured (set api_key in config or GITHUB_TOKEN env var)")
-    
-    def get_provider(self, provider_name: str) -> Optional[LLMProvider]:
-        """Get a specific provider by name."""
-        return self.providers.get(provider_name)
-    
-    def get_available_providers(self) -> List[str]:
-        """Get list of available provider names."""
-        return list(self.providers.keys())
-    
-    def get_default_provider(self) -> Optional[LLMProvider]:
-        """Get the default provider (first available)."""
-        if not self.providers:
-            return None
-        return next(iter(self.providers.values()))
-    
-    async def generate_response(
+    def create_agent_team(
         self,
-        prompt: str,
-        provider_name: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> tuple[str, str]:
-        """Generate response using specified or default provider."""
+        provider_model: str,
+        team_size: int = 4,
+        roles: Optional[List[AgentRole]] = None
+    ) -> List[LLMAgent]:
+        """Create a team of agents using the same model"""
+        if roles is None:
+            # Default balanced team
+            roles = [
+                AgentRole.HEAD_CHEF,
+                AgentRole.SOUS_CHEF,
+                AgentRole.LINE_COOK,
+                AgentRole.PREP_COOK
+            ][:team_size]
         
-        if provider_name:
-            provider = self.get_provider(provider_name)
-            if not provider:
-                raise ValueError(f"Provider '{provider_name}' not available")
-        else:
-            provider = self.get_default_provider()
-            if not provider:
-                raise ValueError("No LLM providers available")
+        team = []
+        for i, role in enumerate(roles):
+            name = f"{role.name}_{i+1}"
+            agent = self.create_agent(name, role, provider_model)
+            team.append(agent)
         
-        response = await provider.generate_response(prompt, context, **kwargs)
-        return response, provider.get_provider_name()
+        return team
     
-    def add_provider(self, name: str, provider: LLMProvider) -> None:
-        """Add a custom provider."""
-        self.providers[name] = provider
-        logger.info(f"Custom provider '{name}' added")
+    def create_mixed_provider_team(
+        self,
+        provider_models: List[Tuple[str, AgentRole]]
+    ) -> List[LLMAgent]:
+        """Create team with different models for different roles"""
+        team = []
+        for i, (model, role) in enumerate(provider_models):
+            name = f"{role.name}_{model.split('/')[-1][:8]}_{i+1}"
+            agent = self.create_agent(name, role, model)
+            team.append(agent)
+        return team
     
-    def remove_provider(self, name: str) -> None:
-        """Remove a provider."""
-        if name in self.providers:
-            del self.providers[name]
-            logger.info(f"Provider '{name}' removed")
+    async def execute_scenario(
+        self,
+        tasks: List[Tuple[TaskType, Dict[str, Any]]],
+        duration_seconds: int = 300
+    ) -> Dict[str, Any]:
+        """Execute a scenario with given tasks"""
+        logger.info(f"Starting scenario with {len(tasks)} tasks, duration: {duration_seconds}s")
+        
+        self.scenario_start_time = time.time()
+        self.scenario_end_time = self.scenario_start_time + duration_seconds
+        
+        # Assign tasks to agents based on hierarchy
+        task_assignments = self._assign_tasks(tasks)
+        
+        # Process tasks with message passing
+        results = await self._process_with_messages(task_assignments, duration_seconds)
+        
+        # Collect metrics
+        metrics = self._collect_scenario_metrics()
+        
+        return {
+            "duration": time.time() - self.scenario_start_time,
+            "tasks_completed": len([e for e in self.execution_history if e.success]),
+            "total_tasks": len(tasks),
+            "agent_metrics": metrics,
+            "execution_history": [e.to_dict() for e in self.execution_history],
+            "message_count": len(self.message_bus)
+        }
+    
+    def _assign_tasks(
+        self, 
+        tasks: List[Tuple[TaskType, Dict[str, Any]]]
+    ) -> Dict[str, List[Tuple[TaskType, Dict]]]:
+        """Assign tasks to agents based on role hierarchy"""
+        assignments = defaultdict(list)
+        
+        # Sort agents by role level
+        sorted_agents = sorted(
+            self.agents.items(), 
+            key=lambda x: x[1].role.value, 
+            reverse=True
+        )
+        
+        for task_type, context in tasks:
+            # Find suitable agents
+            suitable_agents = [
+                name for name, agent in sorted_agents
+                if task_type in agent.available_tasks
+            ]
+            
+            if suitable_agents:
+                # Assign to most appropriate agent (highest rank that can do it)
+                assigned_to = suitable_agents[0]
+                
+                # Add other suitable agents to context for collaboration
+                context['other_agents'] = suitable_agents[1:]
+                assignments[assigned_to].append((task_type, context))
+            else:
+                logger.warning(f"No suitable agent for task {task_type.function_name}")
+        
+        return assignments
+    
+    async def _process_with_messages(
+        self,
+        task_assignments: Dict[str, List[Tuple[TaskType, Dict]]],
+        duration_seconds: int
+    ) -> List[TaskExecution]:
+        """Process tasks with inter-agent messaging"""
+        results = []
+        end_time = time.time() + duration_seconds
+        
+        # Head chef announces tasks
+        head_chef = self._get_head_chef()
+        if head_chef:
+            for agent_name, tasks in task_assignments.items():
+                for task_type, _ in tasks:
+                    message = head_chef.send_message(
+                        agent_name,
+                        f"Please execute {task_type.function_name}",
+                        task_type
+                    )
+                    self.message_bus.append(message)
+                    self.agents[agent_name].receive_message(message)
+        
+        # Process tasks and messages
+        for agent_name, tasks in task_assignments.items():
+            agent = self.agents[agent_name]
+            
+            for task_type, context in tasks:
+                if time.time() > end_time:
+                    logger.info("Time limit reached")
+                    break
+                
+                # Process any pending messages first
+                self._process_agent_messages(agent)
+                
+                # Execute task
+                execution = agent.process_task(task_type, context, device=agent.device)
+                self.execution_history.append(execution)
+                results.append(execution)
+                
+                # Send collaboration messages if needed
+                if execution.collaboration_agents:
+                    for collab_agent in execution.collaboration_agents:
+                        if collab_agent in self.agents:
+                            message = agent.send_message(
+                                collab_agent,
+                                f"Need assistance with {task_type.function_name}",
+                                task_type
+                            )
+                            self.message_bus.append(message)
+                            self.agents[collab_agent].receive_message(message)
+                
+                # Head chef quality check
+                if head_chef and agent_name != head_chef.name:
+                    if execution.quality_score < 0.7:
+                        message = head_chef.send_message(
+                            agent_name,
+                            f"Quality issue with {task_type.function_name}. Score: {execution.quality_score:.2f}"
+                        )
+                        self.message_bus.append(message)
+                        agent.receive_message(message)
+                    
+                        agent.authority_compliance *= 0.95
+   
+        
+        return results
+    
+    def _process_agent_messages(self, agent: LLMAgent):
+        """Process messages in agent's queue"""
+        while agent.message_queue:
+            message = agent.message_queue.pop(0)
+     
+            if message.role.value > agent.role.value:
+                agent.authority_compliance = min(1.0, agent.authority_compliance * 1.02)
+            
 
+            if message.requires_response:
+                response = agent.send_message(
+                    message.sender,
+                    f"Acknowledged {message.content}"
+                )
+                self.message_bus.append(response)
+                
+    
+                if message.sender in self.agents:
+                    self.agents[message.sender].receive_message(response)
+    
+    def _get_head_chef(self) -> Optional[LLMAgent]:
+        """Get the head chef agent if exists"""
+        for agent in self.agents.values():
+            if agent.role == AgentRole.HEAD_CHEF:
+                return agent
+        return None
+    
+    def _collect_scenario_metrics(self) -> Dict[str, Any]:
+        """Collect comprehensive metrics from scenario execution"""
+        agent_metrics = {}
+        
+        for name, agent in self.agents.items():
+            agent_metrics[name] = agent.get_metrics()
+        
+    
+        total_tasks = len(self.execution_history)
+        successful_tasks = [e for e in self.execution_history if e.success]
+        
+        team_metrics = {
+            "overall_success_rate": len(successful_tasks) / max(total_tasks, 1),
+            "average_quality": sum(e.quality_score for e in successful_tasks) / max(len(successful_tasks), 1),
+            "average_reasoning_time": sum(e.reasoning_time for e in self.execution_history) / max(total_tasks, 1),
+            "total_messages": len(self.message_bus),
+            "unique_collaborations": len(set(
+                (e.agent_name, collab) 
+                for e in self.execution_history 
+                for collab in e.collaboration_agents
+            ))
+        }
+        
 
-# Global provider manager instance
-_provider_manager: Optional[LLMProviderManager] = None
+        authority_scores = [a.authority_compliance for a in self.agents.values()]
+        team_metrics["hierarchy_compliance"] = sum(authority_scores) / len(authority_scores)
+        
 
-
-def get_llm_manager(settings: Optional[Settings] = None) -> LLMProviderManager:
-    """Get LLM provider manager singleton."""
-    global _provider_manager
-    if _provider_manager is None:
-        _provider_manager = LLMProviderManager(settings)
-    return _provider_manager
-
-
-# Backwards compatibility alias
-get_llm_provider = get_llm_manager
+        messages_by_role = defaultdict(int)
+        for message in self.message_bus:
+            messages_by_role[message.role.name] += 1
+        
+        team_metrics["communication_by_role"] = dict(messages_by_role)
+        
+        return {
+            "agents": agent_metrics,
+            "team": team_metrics
+        }
+    
+    def reset(self):
+        """Reset coordinator for new scenario"""
+        self.message_bus.clear()
+        self.task_queue.clear()
+        self.execution_history.clear()
+        self.scenario_start_time = None
+        self.scenario_end_time = None
+        
+        # Reset agent states
+        for agent in self.agents.values():
+            agent.message_queue.clear()
+            agent.sent_messages.clear()
+            agent.task_history.clear()
+            agent.authority_compliance = 1.0
+            agent.collaboration_score = 0.0
+    
+    def get_execution_trace(self) -> List[Dict]:
+        """Get detailed execution trace for analysis"""
+        trace = []
+        
+        # Combine executions and messages chronologically
+        for execution in self.execution_history:
+            trace.append({
+                "type": "execution",
+                "timestamp": execution.start_time,
+                "agent": execution.agent_name,
+                "task": execution.task_type.function_name,
+                "success": execution.success,
+                "quality": execution.quality_score
+            })
+        
+        for message in self.message_bus:
+            trace.append({
+                "type": "message",
+                "timestamp": message.timestamp,
+                "sender": message.sender,
+                "recipient": message.recipient,
+                "content": message.content[:100]  # Truncate for readability
+            })
+        
+        # Sort by timestamp
+        trace.sort(key=lambda x: x["timestamp"])
+        return trace

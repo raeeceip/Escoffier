@@ -23,35 +23,13 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.104.1",
-    "uvicorn[standard]>=0.24.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
-    "sqlalchemy>=2.0.23",
-    "alembic>=1.12.1",
-    "openai>=1.3.7",
-    "anthropic>=0.7.7",
-    "cohere>=4.37",
-    "transformers>=4.36.0",
-    "torch>=2.1.1",
-    "accelerate>=0.25.0",
-    "datasets>=2.14.7",
-    "pandas>=2.1.3",
-    "numpy>=1.25.2",
-    "fire>=0.5.0",
-    "python-dotenv>=1.0.0",
-    "loguru>=0.7.2",
-    "httpx>=0.25.2",
-    "aiofiles>=23.2.0",
-    "jinja2>=3.1.2",
-    "python-multipart>=0.0.6",
-    "plotly>=5.17.0",
-    "kaleido>=0.2.1",
-    "seaborn>=0.12.2",
-    "matplotlib>=3.7.2",
-    "autogen-agentchat>=0.7.4",
-    "autogen-ext[anthropic,openai]>=0.7.4",
-    "ollama>=0.3.0",
+    "fastapi>=0.116.1",
+    "matplotlib>=3.10.5",
+    "pandas>=2.3.1",
+    "seaborn>=0.13.2",
+    "torch>=2.8.0",
+    "transformers>=4.55.2",
+    "uvicorn>=0.35.0",
 ]
 
 [project.optional-dependencies]
@@ -74,20 +52,18 @@ Issues = "https://github.com/raeeceip/escoffier/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "agents",
+
     "api", 
-    "cli",
+
     "database",
     "kitchen",
     "metrics",
     "providers",
     "recipes",
-    "scenarios"
+
 ]
 include = [
-    "config.py",
-    "escoffier_types.py",
-    "__init__.py"
+
 ]
 
 [tool.black]
